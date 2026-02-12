@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="SoccerBlast.Api/SoccerBlast.Api.csproj" />
+  <Project Path="SoccerBlast.Shared/SoccerBlast.Shared.csproj" />
+  <Project Path="SoccerBlast.Web/SoccerBlast.Web.csproj" />
+</Solution>
