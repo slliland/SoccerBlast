@@ -1,0 +1,49 @@
+## Build results
+[Bb]in/
+[Oo]bj/
+
+## User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## VS / Rider / VS Code
+.vs/
+.idea/
+.vscode/
+
+## OS files
+.DS_Store
+Thumbs.db
+
+## Logs
+*.log
+
+## NuGet
+*.nupkg
+# packages/
+# *.snupkg
+
+## Test results / coverage
+TestResults/
+*.trx
+coverage/
+coverage.cobertura.xml
+
+## ASP.NET / IIS Express
+.vs/config/
+iisexpress/
+
+## EF / local db
+*.db
+*.db-shm
+*.db-wal
+
+## Environment / secrets
+.env
+.env.*
+!*.example
+secrets.json
+appsettings.*.json
+!appsettings.json
