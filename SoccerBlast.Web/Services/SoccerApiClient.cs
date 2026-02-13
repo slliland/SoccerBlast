@@ -18,30 +18,48 @@ public class SoccerApiClient
 {
     private readonly HttpClient _http;
 
+    // default fallback if JS interop hasn't set it yet
+    public string TimeZoneId { get; private set; } = "America/New_York";
+
     public SoccerApiClient(HttpClient http)
     {
         _http = http;
     }
 
+    public void SetTimeZone(string? tz)
+    {
+        if (!string.IsNullOrWhiteSpace(tz))
+            TimeZoneId = tz;
+    }
+
+    private string TzQuery() => $"tz={Uri.EscapeDataString(TimeZoneId)}";
+
     public async Task<List<MatchDto>> GetTodayLocalAsync()
     {
-        return await _http.GetFromJsonAsync<List<MatchDto>>("api/Matches/today-local")
-               ?? new List<MatchDto>();
+        return await _http.GetFromJsonAsync<List<MatchDto>>($"api/Matches/today-local?{TzQuery()}")
+               ?? new();
     }
 
     public async Task<List<MatchDto>> GetByLocalDateAsync(DateOnly date)
     {
         var s = date.ToString("yyyy-MM-dd");
-        return await _http.GetFromJsonAsync<List<MatchDto>>($"api/Matches/date/{s}")
-               ?? new List<MatchDto>();
+        return await _http.GetFromJsonAsync<List<MatchDto>>($"api/Matches/date/{s}?{TzQuery()}")
+               ?? new();
+    }
+
+    public async Task<int> SyncByLocalDateAsync(DateOnly date)
+    {
+        var s = date.ToString("yyyy-MM-dd");
+        var resp = await _http.PostAsync($"api/Matches/date/{s}?{TzQuery()}", content: null);
+        resp.EnsureSuccessStatusCode();
+
+        var body = await resp.Content.ReadFromJsonAsync<int>();
+        return body;
     }
 
     public async Task<int> SyncTodayAsync()
     {
-        Console.WriteLine(">>> SyncTodayAsync called");
-        var resp = await _http.PostAsync("api/admin/sync/today", content: null);
-        Console.WriteLine($">>> SyncTodayAsync status: {(int)resp.StatusCode}");
-
+        var resp = await _http.PostAsync($"api/admin/sync/today?{TzQuery()}", content: null);
         resp.EnsureSuccessStatusCode();
         var json = await resp.Content.ReadFromJsonAsync<SyncResult>();
         return json?.syncedMatches ?? 0;
@@ -49,6 +67,12 @@ public class SoccerApiClient
 
     public async Task<SyncStatus?> GetSyncStatusAsync()
     {
-        return await _http.GetFromJsonAsync<SyncStatus>("api/admin/sync/status");
+        return await _http.GetFromJsonAsync<SyncStatus>($"api/admin/sync/status?{TzQuery()}");
+    }
+
+    public async Task<List<NewsDto>> GetRecentNewsAsync(int limit = 10)
+    {
+        return await _http.GetFromJsonAsync<List<NewsDto>>($"api/News/recent?limit={limit}")
+            ?? new();
     }
 }

@@ -30,15 +30,34 @@ public class MatchSyncService
     private async Task UpsertTeamAsync(TeamItem t)
     {
         var team = await _db.Teams.FindAsync(t.Id);
+
+        // If matches endpoint has crest, use it; otherwise fetch team details once
+        var crest = t.Crest;
+        if (string.IsNullOrWhiteSpace(crest))
+        {
+            var details = await _client.GetTeamAsync(t.Id);
+            crest = details?.Crest;
+        }
+
         if (team == null)
         {
-            _db.Teams.Add(new Team { Id = t.Id, Name = t.Name });
+            _db.Teams.Add(new Team
+            {
+                Id = t.Id,
+                Name = t.Name,
+                CrestUrl = crest
+            });
         }
         else
         {
             team.Name = t.Name;
+
+            // only overwrite if we found a crest
+            if (!string.IsNullOrWhiteSpace(crest))
+                team.CrestUrl = crest;
         }
     }
+
 
     public async Task<int> SyncLocalDateAsync(DateTime localDate, string timeZoneId = "America/New_York", string syncType = "DATE")
     {
@@ -88,6 +107,8 @@ public class MatchSyncService
             // Re-insert matches fresh plus ensure teams/competitions exist
             foreach (var (m, matchUtc) in filtered)
             {
+                Console.WriteLine($"HomeTeam {m.HomeTeam.Id} crest(from matches)='{m.HomeTeam.Crest}'");
+                Console.WriteLine($"AwayTeam {m.AwayTeam.Id} crest(from matches)='{m.AwayTeam.Crest}'");
                 // Upsert Competition
                 var comp = await _db.Competitions.FindAsync(m.Competition.Id);
                 if (comp == null)

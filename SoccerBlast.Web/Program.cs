@@ -13,6 +13,8 @@ builder.Services.AddHttpClient<SoccerApiClient>(client =>
     client.BaseAddress = new Uri(baseUrl);
 });
 
+builder.Services.AddScoped<BrowserTimeZone>();
+
 var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())

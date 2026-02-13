@@ -12,10 +12,12 @@ namespace SoccerBlast.Api.Controllers;
 public class MatchesController : ControllerBase
 {
     private readonly AppDbContext _db;
+    private readonly MatchSyncService _sync;
 
-    public MatchesController(AppDbContext db)
+    public MatchesController(AppDbContext db, MatchSyncService sync)
     {
         _db = db;
+        _sync = sync;
     }
 
     private async Task<List<MatchDto>> QueryMatches(DateTime startUtc, DateTime endUtc, int? competitionId = null)
@@ -36,9 +38,17 @@ public class MatchesController : ControllerBase
             {
                 Id = m.Id,
                 UtcDate = m.UtcDate,
+                CompetitionId = m.CompetitionId,
                 CompetitionName = m.Competition.Name,
+
+                HomeTeamId = m.HomeTeamId,
                 HomeTeamName = m.HomeTeam.Name,
+                HomeTeamCrestUrl = m.HomeTeam.CrestUrl,
+
+                AwayTeamId = m.AwayTeamId,
                 AwayTeamName = m.AwayTeam.Name,
+                AwayTeamCrestUrl = m.AwayTeam.CrestUrl,
+
                 HomeScore = m.HomeScore,
                 AwayScore = m.AwayScore,
                 Status = m.Status
@@ -91,13 +101,21 @@ public class MatchesController : ControllerBase
         var results = await q
             .OrderBy(m => m.UtcDate)
             .Take(limit)
-            .Select(m => new MatchDto
+           .Select(m => new MatchDto
             {
                 Id = m.Id,
                 UtcDate = m.UtcDate,
+                CompetitionId = m.CompetitionId,
                 CompetitionName = m.Competition.Name,
+
+                HomeTeamId = m.HomeTeamId,
                 HomeTeamName = m.HomeTeam.Name,
+                HomeTeamCrestUrl = m.HomeTeam.CrestUrl,
+
+                AwayTeamId = m.AwayTeamId,
                 AwayTeamName = m.AwayTeam.Name,
+                AwayTeamCrestUrl = m.AwayTeam.CrestUrl,
+
                 HomeScore = m.HomeScore,
                 AwayScore = m.AwayScore,
                 Status = m.Status
@@ -117,26 +135,38 @@ public class MatchesController : ControllerBase
     }
 
     [HttpGet("today-local")]
-    public async Task<ActionResult<List<MatchDto>>> GetTodayLocal([FromQuery] int? competitionId)
+    public async Task<ActionResult<List<MatchDto>>> GetTodayLocal(
+        [FromQuery] int? competitionId,
+        [FromQuery] string? tz)
     {
-        var tzId = "America/New_York";
-        var nowLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById(tzId));
-        var (startUtc, endUtc) = DateRangeService.GetUtcRangeForLocalDate(nowLocal.Date, tzId);
-
-        var matches = await QueryMatches(startUtc, endUtc, competitionId);
-        return matches;
+        tz ??= "America/New_York"; // fallback
+        var nowLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById(tz));
+        var (startUtc, endUtc) = DateRangeService.GetUtcRangeForLocalDate(nowLocal.Date, tz);
+        return await QueryMatches(startUtc, endUtc, competitionId);
     }
+
     [HttpGet("date/{date}")]
-    public async Task<ActionResult<List<MatchDto>>> GetByLocalDate(string date, [FromQuery] int? competitionId)
+    public async Task<ActionResult<List<MatchDto>>> GetByLocalDate(
+        string date,
+        [FromQuery] int? competitionId,
+        [FromQuery] string? tz)
     {
-        // Expect yyyy-MM-dd
-        if (!DateTime.TryParseExact(date, "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out var localDate))
-            return BadRequest("Invalid date format. Use yyyy-MM-dd, e.g. 2026-02-12.");
+        if (!DateTime.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var localDate))
+            return BadRequest("Invalid date format. Use yyyy-MM-dd.");
 
-        var tzId = "America/New_York";
-        var (startUtc, endUtc) = DateRangeService.GetUtcRangeForLocalDate(localDate, tzId);
+        tz ??= "America/New_York";
+        var (startUtc, endUtc) = DateRangeService.GetUtcRangeForLocalDate(localDate, tz);
+        return await QueryMatches(startUtc, endUtc, competitionId);
+    }
 
-        var matches = await QueryMatches(startUtc, endUtc, competitionId);
-        return matches;
+    [HttpPost("date/{date}")]
+    public async Task<ActionResult<int>> SyncByLocalDate(string date, [FromQuery] string? tz)
+    {
+        if (!DateTime.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var localDate))
+            return BadRequest("Invalid date format. Use yyyy-MM-dd.");
+
+        tz ??= "America/New_York";
+        var synced = await _sync.SyncLocalDateAsync(localDate.Date, tz);
+        return Ok(synced);
     }
 }

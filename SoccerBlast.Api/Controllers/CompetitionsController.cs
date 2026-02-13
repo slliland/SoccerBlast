@@ -32,4 +32,23 @@ public class CompetitionsController : ControllerBase
 
         return comps;
     }
+    [HttpGet("used")]
+    public async Task<ActionResult<List<CompetitionUsedDto>>> GetUsed()
+    {
+        var used = await _db.Matches
+            .AsNoTracking()
+            .GroupBy(m => new { m.CompetitionId, m.Competition.Name, m.Competition.Country })
+            .Select(g => new CompetitionUsedDto
+            {
+                Id = g.Key.CompetitionId,
+                Name = g.Key.Name,
+                Country = g.Key.Country,
+                MatchCount = g.Count()
+            })
+            .OrderByDescending(x => x.MatchCount)
+            .ThenBy(x => x.Name)
+            .ToListAsync();
+
+        return used;
+    }
 }

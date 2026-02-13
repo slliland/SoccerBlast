@@ -45,6 +45,18 @@ public class CompetitionItem
     public AreaItem? Area { get; set; }
 }
 
+public class TeamDetailsResponse
+{
+    [JsonPropertyName("id")]
+    public int Id { get; set; }
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
+
+    [JsonPropertyName("crest")]
+    public string? Crest { get; set; }
+}
+
 public class AreaItem
 {
     [JsonPropertyName("name")]
@@ -58,6 +70,9 @@ public class TeamItem
 
     [JsonPropertyName("name")]
     public string Name { get; set; } = "";
+
+    [JsonPropertyName("crest")]
+    public string? Crest { get; set; }
 }
 
 public class ScoreItem

@@ -22,4 +22,9 @@ public class FootballDataClient
         var resp = await _http.GetFromJsonAsync<MatchesResponse>(url);
         return resp?.Matches ?? [];
     }
+
+    public async Task<TeamDetailsResponse?> GetTeamAsync(int teamId)
+    {
+        return await _http.GetFromJsonAsync<TeamDetailsResponse>($"teams/{teamId}");
+    }
 }

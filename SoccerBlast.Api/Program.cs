@@ -32,6 +32,9 @@ builder.Services.AddHttpClient<FootballDataClient>((sp, client) =>
 
 
 builder.Services.AddScoped<MatchSyncService>();
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient<NewsService>();
+builder.Services.AddScoped<NewsService>();
 
 var app = builder.Build();
 
