@@ -1,0 +1,303 @@
+@page "/"
+@using SoccerBlast.Shared.Contracts
+@inject SoccerBlast.Web.Services.SoccerApiClient Api
+@using SoccerBlast.Web.Services
+@using Microsoft.AspNetCore.Components.Web
+@rendermode RenderMode.InteractiveServer
+
+<div class="sb-shell">
+  <div class="sb-card sb-topbar">
+    <div class="sb-brand">
+      <div class="sb-dot"></div>
+      <div>Goalscore</div>
+    </div>
+
+    <div class="sb-tabs">
+      <a class="active" href="/">Live Scores</a>
+      <a href="/all">All Match</a>
+      <a href="/video">Video</a>
+      <a href="/news">News</a>
+      <a href="/stats">Stats</a>
+      <a href="/rankings">Rankings</a>
+    </div>
+
+    <div class="sb-avatar" title="Profile"></div>
+  </div>
+
+  <div class="sb-grid" style="margin-top:16px;">
+
+    <!-- LEFT: Leagues -->
+    <div class="sb-left sb-card">
+      <div class="sb-section-title">Football Leagues</div>
+
+      <div class="sb-list">
+        @foreach (var l in _leagues)
+        {
+          <button class="@(l == _selectedLeague ? "active" : "")" @onclick="() => SelectLeague(l)">
+            <span>@l</span>
+            @if (l == "Premier League")
+            {
+              <span class="badge-live">Live</span>
+            }
+          </button>
+        }
+      </div>
+    </div>
+
+    <!-- MAIN -->
+    <div class="sb-card sb-main">
+      <div class="hero">
+        <div>
+          <h3>Download and get the app</h3>
+          <p>V1 dashboard: matches are grouped by competition. Next we’ll add league filters + search + detail page.</p>
+        </div>
+        <button class="btn" disabled="@_syncing" @onclick="SyncToday">
+          @(_syncing ? "Syncing..." : "Sync Today")
+        </button>
+        @if (!string.IsNullOrEmpty(_toast))
+        {
+        <div class="sb-card" style="margin-top:12px;padding:12px 14px;border-radius:14px;">
+            @_toast
+        </div>
+        }
+
+        @if (_status != null)
+        {
+        <div class="sb-card" style="margin-top:12px;padding:12px 14px;border-radius:14px;">
+            <div style="font-weight:900;">Last Sync</div>
+            <div class="small-muted">@_status.message</div>
+            @if (_status.finishedAtUtc != null)
+            {
+            <div class="small-muted" style="margin-top:6px;">
+                Finished: @_status.finishedAtUtc • Matches: @_status.syncedMatches
+            </div>
+            }
+        </div>
+        }
+      </div>
+
+      <div class="section-head" style="margin-top:14px;">
+        <h4>Matches (@_viewDate.ToString("yyyy-MM-dd"))</h4>
+        <div class="small-muted">
+          <button class="btn" style="padding:8px 10px;border-radius:12px;" @onclick="PrevDay">◀</button>
+          <span style="margin:0 10px;">Local Day</span>
+          <button class="btn" style="padding:8px 10px;border-radius:12px;" @onclick="NextDay">▶</button>
+        </div>
+      </div>
+
+      @if (_loading)
+      {
+        <p class="small-muted">Loading matches…</p>
+      }
+      else if (_matches.Count == 0)
+      {
+        <p class="small-muted">No matches found for this day.</p>
+      }
+      else
+      {
+        @foreach (var group in GroupByCompetition(_matches))
+        {
+          <div class="block">
+            <div class="block-title">
+              <span>@group.Key</span>
+              <span class="small-muted">@_viewDate.ToString("dd/MM/yyyy")</span>
+            </div>
+
+            @foreach (var m in group.Value)
+            {
+              <div class="match-row">
+                <div class="time-pill">@FormatLocalTime(m.UtcDate)</div>
+
+                <div class="team">
+                  <div class="logo"></div>
+                  <div class="name">@m.HomeTeamName</div>
+                </div>
+
+                <div class="team">
+                  <div class="logo"></div>
+                  <div class="name">@m.AwayTeamName</div>
+                </div>
+
+                <div class="score">
+                  <div class="num">@Score(m.HomeScore)</div>
+                  <div class="num">:</div>
+                  <div class="num">@Score(m.AwayScore)</div>
+
+                  <div class="status @(IsLive(m.Status) ? "live" : "")">
+                    @m.Status
+                  </div>
+                </div>
+              </div>
+            }
+          </div>
+        }
+      }
+    </div>
+
+    <!-- RIGHT: News -->
+    <div class="sb-right sb-card">
+      <div class="section-head">
+        <h4>Recent News</h4>
+        <span class="small-muted">mock</span>
+      </div>
+
+      @foreach (var n in _news)
+      {
+        <div class="news-item">
+          <div class="news-thumb"></div>
+          <div>
+            <p class="news-title">@n.Title</p>
+            <div class="news-meta">@n.When</div>
+          </div>
+        </div>
+      }
+    </div>
+
+  </div>
+</div>
+
+@code {
+  private bool _loading = true;
+
+  private bool _syncing = false;
+  private string? _toast;
+  private SyncStatus? _status;
+
+  private DateOnly _viewDate;
+  private List<MatchDto> _matches = new();
+
+  private string _selectedLeague = "All";
+  private readonly List<string> _leagues = new()
+  {
+    "All",
+    "Premier League",
+    "LaLiga",
+    "Serie A",
+    "Bundesliga",
+    "Eredivisie",
+    "Primeira Liga",
+    "Champions League",
+    "Europa League",
+    "Conference League"
+  };
+
+  private readonly List<(string Title, string When)> _news = new()
+  {
+    ("OFFICIAL: Benzema is the UCL Player of the Season 21/22", "about 2 hours ago"),
+    ("2021/22 UEFA Champions League Team of the Season", "25 minutes ago"),
+    ("Transfer rumors: big move incoming", "1 hour ago"),
+    ("Matchday recap: goals everywhere", "yesterday"),
+    ("Injury update before the weekend", "2 days ago")
+  };
+
+  protected override async Task OnInitializedAsync()
+  {
+    // start with "today local" view
+    _viewDate = DateOnly.FromDateTime(DateTime.Now);
+
+    await LoadMatchesForLocalDate(_viewDate);
+  }
+
+  private async Task LoadMatchesForLocalDate(DateOnly d)
+  {
+    _loading = true;
+    StateHasChanged();
+
+    _matches = await Api.GetByLocalDateAsync(d);
+
+    // (Optional) simple client-side filter placeholder:
+    if (_selectedLeague != "All")
+    {
+      _matches = _matches
+        .Where(m => LeagueMatchesSelection(m.CompetitionName, _selectedLeague))
+        .ToList();
+    }
+
+    _loading = false;
+  }
+
+  private void SelectLeague(string league)
+  {
+    _selectedLeague = league;
+    _ = LoadMatchesForLocalDate(_viewDate);
+  }
+
+  private async Task PrevDay()
+  {
+    _viewDate = _viewDate.AddDays(-1);
+    await LoadMatchesForLocalDate(_viewDate);
+  }
+
+  private async Task NextDay()
+  {
+    _viewDate = _viewDate.AddDays(1);
+    await LoadMatchesForLocalDate(_viewDate);
+  }
+
+  private async Task SyncToday()
+  {
+    try
+    {
+        _syncing = true;
+        _toast = "Syncing matches from API...";
+        StateHasChanged();
+
+        var synced = await Api.SyncTodayAsync();
+        _toast = $"Synced {synced} matches.";
+        _status = await Api.GetSyncStatusAsync();
+
+        await LoadMatchesForLocalDate(_viewDate);
+    }
+    catch (Exception ex)
+    {
+        _toast = $"Sync failed: {ex.Message}";
+    }
+    finally
+    {
+        _syncing = false;
+        StateHasChanged();
+    }
+  }
+
+
+  private static string Score(int? s) => s.HasValue ? s.Value.ToString() : "-";
+
+  private static bool IsLive(string? status)
+    => status is "IN_PLAY" or "PAUSED" or "LIVE";
+
+  private static string FormatLocalTime(DateTime utcDate)
+  {
+    // your API returns utcDate without timezone; treat as local for display
+    // if you stored UTC kind properly, you can convert here more strictly.
+    var dt = utcDate;
+    return dt.ToString("HH:mm");
+  }
+
+  private static Dictionary<string, List<MatchDto>> GroupByCompetition(List<MatchDto> matches)
+  {
+    return matches
+      .GroupBy(m => m.CompetitionName ?? "Other")
+      .OrderBy(g => g.Key)
+      .ToDictionary(g => g.Key, g => g.ToList());
+  }
+
+  private static bool LeagueMatchesSelection(string? competitionName, string selectedLeague)
+  {
+    if (string.IsNullOrWhiteSpace(competitionName)) return false;
+
+    // super simple mapping for now
+    return selectedLeague switch
+    {
+      "Premier League" => competitionName.Contains("Premier League", StringComparison.OrdinalIgnoreCase),
+      "LaLiga" => competitionName.Contains("Primera", StringComparison.OrdinalIgnoreCase) ||
+                  competitionName.Contains("La Liga", StringComparison.OrdinalIgnoreCase) ||
+                  competitionName.Contains("LaLiga", StringComparison.OrdinalIgnoreCase),
+      "Serie A" => competitionName.Contains("Serie A", StringComparison.OrdinalIgnoreCase),
+      "Bundesliga" => competitionName.Contains("Bundesliga", StringComparison.OrdinalIgnoreCase),
+      "Champions League" => competitionName.Contains("Champions League", StringComparison.OrdinalIgnoreCase),
+      "Europa League" => competitionName.Contains("Europa League", StringComparison.OrdinalIgnoreCase),
+      "Conference League" => competitionName.Contains("Conference League", StringComparison.OrdinalIgnoreCase),
+      _ => true
+    };
+  }
+}

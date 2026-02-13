@@ -1,23 +1,31 @@
-using SoccerBlast.Shared.Contracts;
+using SoccerBlast.Web.Services;
+using SoccerBlast.Web.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddRazorPages();
-builder.Services.AddServerSideBlazor();
+builder.Services.AddRazorComponents()
+    .AddInteractiveServerComponents();
 
-// BaseAddress points to your API URL (adjust port to match your API)
-builder.Services.AddHttpClient("SoccerApi", client =>
+// API client configured from appsettings
+builder.Services.AddHttpClient<SoccerApiClient>(client =>
 {
-    client.BaseAddress = new Uri("https://localhost:5001/");
+    var baseUrl = builder.Configuration["Api:BaseUrl"] ?? "http://localhost:5249/";
+    client.BaseAddress = new Uri(baseUrl);
 });
 
 var app = builder.Build();
 
+if (!app.Environment.IsDevelopment())
+{
+    app.UseExceptionHandler("/Error", createScopeForErrors: true);
+    app.UseHsts();
+}
+
 app.UseHttpsRedirection();
 app.UseStaticFiles();
-app.UseRouting();
+app.UseAntiforgery();
 
-app.MapBlazorHub();
-app.MapFallbackToPage("/_Host");
+app.MapRazorComponents<App>()
+    .AddInteractiveServerRenderMode();
 
 app.Run();

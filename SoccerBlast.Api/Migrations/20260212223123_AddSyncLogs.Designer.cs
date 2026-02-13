@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SoccerBlast.Api.Data;
 
@@ -10,9 +11,11 @@ using SoccerBlast.Api.Data;
 namespace SoccerBlast.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260212223123_AddSyncLogs")]
+    partial class AddSyncLogs
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.3");
@@ -20,7 +23,6 @@ namespace SoccerBlast.Api.Migrations
             modelBuilder.Entity("SoccerBlast.Api.Models.Competition", b =>
                 {
                     b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("Country")
@@ -38,7 +40,6 @@ namespace SoccerBlast.Api.Migrations
             modelBuilder.Entity("SoccerBlast.Api.Models.Match", b =>
                 {
                     b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
                     b.Property<int?>("AwayScore")
@@ -65,13 +66,11 @@ namespace SoccerBlast.Api.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UtcDate");
+                    b.HasIndex("AwayTeamId");
 
-                    b.HasIndex("AwayTeamId", "UtcDate");
+                    b.HasIndex("CompetitionId");
 
-                    b.HasIndex("CompetitionId", "UtcDate");
-
-                    b.HasIndex("HomeTeamId", "UtcDate");
+                    b.HasIndex("HomeTeamId");
 
                     b.ToTable("Matches");
                 });
@@ -112,7 +111,6 @@ namespace SoccerBlast.Api.Migrations
             modelBuilder.Entity("SoccerBlast.Api.Models.Team", b =>
                 {
                     b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("Name")
