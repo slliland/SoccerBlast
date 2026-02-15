@@ -75,4 +75,14 @@ public class SoccerApiClient
         return await _http.GetFromJsonAsync<List<NewsDto>>($"api/News/recent?limit={limit}")
             ?? new();
     }
+
+    public async Task<List<SearchResultDto>> SearchAsync(string q, int limit = 12)
+    {
+        q = (q ?? "").Trim();
+        if (q.Length < 2) return new();
+
+        return await _http.GetFromJsonAsync<List<SearchResultDto>>(
+            $"api/search?q={Uri.EscapeDataString(q)}&limit={limit}"
+        ) ?? new();
+    }
 }

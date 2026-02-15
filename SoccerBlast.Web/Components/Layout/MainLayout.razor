@@ -1,23 +1,60 @@
 ﻿@inherits LayoutComponentBase
 
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+<div class="app-shell">
+    <aside class="app-rail @(IsCollapsed ? "collapsed" : "expanded")"
+           @onmouseenter="OnMouseEnter"
+           @onmouseleave="OnMouseLeave">
 
-    <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
+        <nav class="rail-nav">
+            <NavLink class="nav-item" href="/" Match="NavLinkMatch.All">
+                <span class="nav-ic">
+                    <img class="nav-ic-img" src="images/icons/home.png" alt="Home" />
+                </span>
+                <span class="nav-tx">Home</span>
+            </NavLink>
+
+            <NavLink class="nav-item" href="/favorites">
+                <span class="nav-ic">
+                    <img class="nav-ic-img" src="images/icons/favorite.png" alt="Favorites" />
+                </span>
+                <span class="nav-tx">Favorites</span>
+            </NavLink>
+
+            <NavLink class="nav-item" href="/pinned">
+                <span class="nav-ic">
+                    <img class="nav-ic-img" src="images/icons/pinned.png" alt="Pinned" />
+                </span>
+                <span class="nav-tx">Pinned</span>
+            </NavLink>
+
+            <NavLink class="nav-item" href="/filters">
+                <span class="nav-ic">
+                    <img class="nav-ic-img" src="images/icons/filters.png" alt="Filters" />
+                </span>
+                <span class="nav-tx">Filters</span>
+            </NavLink>
+
+            <NavLink class="nav-item" href="/settings">
+                <span class="nav-ic">
+                    <img class="nav-ic-img" src="images/icons/settings.png" alt="Settings" />
+                </span>
+                <span class="nav-tx">Settings</span>
+            </NavLink>
+        </nav>
+
+        <div class="rail-bottom">
+            <div class="rail-hint">Goalscore</div>
         </div>
+    </aside>
 
-        <article class="content px-4">
-            @Body
-        </article>
+    <main class="app-main">
+        @Body
     </main>
 </div>
 
-<div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
-</div>
+@code {
+    private bool IsCollapsed = true;
+
+    private void OnMouseEnter() => IsCollapsed = false;
+    private void OnMouseLeave() => IsCollapsed = true;
+}

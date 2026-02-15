@@ -1,0 +1,143 @@
+/* =========================
+   Layout Shell
+========================= */
+.app-shell{
+  min-height:100vh;
+  display:flex;
+  background: radial-gradient(circle at 10% 10%, #ffffff 0%, #fefdfb 55%, #fffbeb 100%);
+}
+
+/* =========================
+   Sidebar (gradient + blur) — keep your sidebar background
+========================= */
+.app-rail{
+  height:100vh;
+  position: sticky;
+  top: 0;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+
+  border-right:1px solid rgba(245,158,11,.35);
+  backdrop-filter: blur(14px);
+  box-shadow: 12px 0 30px rgba(245,158,11,.15);
+  transition: width .18s ease;
+
+  background:
+    radial-gradient(circle at 20% 10%, rgba(245,158,11,.85) 0%, rgba(217,119,6,.65) 40%, rgba(255,252,240,.75) 85%),
+    linear-gradient(135deg, rgba(245,158,11,.70), rgba(217,119,6,.65)) !important;
+}
+
+/* width states */
+.app-rail.collapsed{ width:76px; }
+.app-rail.expanded{ width:240px; }
+
+/* =========================
+   Nav
+========================= */
+.rail-nav{
+  padding:14px 10px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+/* Nav item */
+.nav-item{
+  display:flex;
+  align-items:center;
+  gap:12px;
+
+  padding:12px 12px;
+  border-radius:16px;
+
+  text-decoration:none;
+  color:#111827;
+  font-weight:900;
+
+  border:1px solid rgba(255,255,255,.35);
+  background: rgba(255,255,255,.40);
+
+  transition: transform .08s ease, background .12s ease, box-shadow .12s ease;
+}
+
+.nav-item:hover{
+  background: rgba(255,255,255,.62);
+  transform: translateY(-1px);
+}
+
+.nav-item.active{
+  background: rgba(255,255,255,.82);
+  border:1px solid rgba(17,24,39,.10);
+  box-shadow: 0 10px 20px rgba(17,24,39,.06);
+}
+
+/* icon image */
+.nav-ic-img{
+  width:20px;
+  height:20px;
+  object-fit:contain;
+  display:block;
+
+  /* make faint transparent PNGs look solid */
+  opacity: 1;
+  filter: contrast(1.25) saturate(1.1);
+}
+
+/* Label */
+.nav-tx{
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  font-size:14px;
+}
+
+/* =========================
+   Collapsed: icon centered, text hidden
+========================= */
+.app-rail.collapsed .nav-item{
+  width:52px;               /* square look */
+  height:52px;
+  padding:0;                /* remove padding that stretches shape */
+  justify-content:center;
+  align-self:center;        /* centers the button itself in the rail */
+  gap:0;
+  border-radius:16px;
+  display:flex;
+  align-items:center;
+}
+
+.app-rail.collapsed .nav-tx{
+  opacity:0;
+  width:0;
+  margin:0;
+  pointer-events:none;
+}
+
+/* =========================
+   Bottom hint
+========================= */
+.rail-bottom{
+  margin-top:auto;
+  padding:10px 12px 14px 12px;
+  opacity:.7;
+}
+
+.rail-hint{
+  font-size:12px;
+  font-weight:900;
+  color:#111827;
+  white-space:nowrap;
+}
+
+.app-rail.collapsed .rail-hint{
+  opacity:0;
+}
+
+/* =========================
+   Main
+========================= */
+.app-main{
+  flex:1;
+  min-width:0;
+}

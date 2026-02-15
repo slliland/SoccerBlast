@@ -7,7 +7,7 @@
 @inject SoccerBlast.Web.Services.BrowserTimeZone Tz
 @implements IDisposable
 
-<div class="sb-page" @onclick="CloseCalendar">
+<div class="sb-page" @onclick="CloseOverlays">
     <div class="sb-shell">
     <div class="sb-card sb-topbar">
         <div class="sb-brand">
@@ -23,11 +23,46 @@
         <a href="/stats">Stats</a>
         <a href="/rankings">Rankings</a>
         </div>
+        <div class="sb-search" @onclick:stopPropagation="true">
+            <input class="sb-search-input"
+                    placeholder="Search teams, matches, leagues, news…"
+                    value="@_q"
+                    @oninput="OnSearchInput"
+                    @onfocus="OpenSearch" />
 
+            @if (_showSearch)
+            {
+                <div class="sb-search-pop">
+                @if (_searchLoading)
+                {
+                    <div class="sb-search-row muted">Searching…</div>
+                }
+                else if (_results.Count == 0 && _q.Trim().Length >= 2)
+                {
+                    <div class="sb-search-row muted">No results</div>
+                }
+                else
+                {
+                    @foreach (var r in _results)
+                    {
+                    <a class="sb-search-row"
+                        href="@ResolveHref(r)"
+                        target="@(IsExternal(r) ? "_blank" : null)"
+                        rel="@(IsExternal(r) ? "noopener noreferrer" : null)"
+                        @onclick="CloseSearch"
+                        @onclick:stopPropagation="true">
+                        <div class="sb-search-title">@r.Title</div>
+                        <div class="sb-search-sub"><b>@r.Type</b> · @r.Subtitle</div>
+                    </a>
+                    }
+                }
+                </div>
+            }
+            </div>
         <div class="sb-avatar" title="Profile"></div>
     </div>
 
-    <div class="sb-grid" style="margin-top:16px;">
+    <div class="sb-grid">
 
         <!-- LEFT: Leagues -->
         <div class="sb-left">
@@ -248,6 +283,64 @@
   private PeriodicTimer? _matchTimer;
   private DateTime _matchesUpdatedLocal = DateTime.Now;
 
+  // search
+  private string _q = "";
+  private bool _showSearch;
+  private bool _searchLoading;
+  private List<SearchResultDto> _results = new();
+  private CancellationTokenSource? _searchCts;
+
+  private void OpenSearch() => _showSearch = true;
+  private void CloseSearch() => _showSearch = false;
+
+  private async Task OnSearchInput(ChangeEventArgs e)
+  {
+    _q = e.Value?.ToString() ?? "";
+    _showSearch = true;
+
+    _searchCts?.Cancel();
+    _searchCts?.Dispose();
+    _searchCts = new CancellationTokenSource();
+    var token = _searchCts.Token;
+
+    _searchLoading = _q.Trim().Length >= 2;
+    StateHasChanged();
+
+    try
+    {
+        // debounce
+        await Task.Delay(250, token);
+
+        if (_q.Trim().Length < 2)
+        {
+            _searchLoading = false;
+            _results.Clear();
+            StateHasChanged();
+            return;
+        }
+
+        var res = await Api.SearchAsync(_q, 12);
+        if (token.IsCancellationRequested) return;
+
+        _results = res;
+        _searchLoading = false;
+        StateHasChanged();
+    }
+    catch (TaskCanceledException) { }
+    catch
+    {
+        _searchLoading = false;
+        StateHasChanged();
+    }
+  }
+
+  private static bool IsExternal(SearchResultDto r)
+    => r.Type == SearchResultType.News && (r.Url?.StartsWith("http", StringComparison.OrdinalIgnoreCase) ?? false);
+
+  private static string ResolveHref(SearchResultDto r)
+    => string.IsNullOrWhiteSpace(r.Url) ? "#" : r.Url!;
+
+
   private void ToggleCalendar()
   {
     _showCalendar = !_showCalendar;
@@ -259,6 +352,12 @@
   }
 
   private void CloseCalendar() => _showCalendar = false;
+
+  private void CloseOverlays()
+  {
+    _showCalendar = false;
+    _showSearch = false;
+  }
 
   private void PrevMonth() => _calMonth = _calMonth.AddMonths(-1);
   private void NextMonth() => _calMonth = _calMonth.AddMonths(1);
@@ -409,6 +508,8 @@
         _clockTimer?.Dispose();
         _newsTimer?.Dispose();
         _matchTimer?.Dispose();
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
     }
     catch { /* ignore */ }
   }

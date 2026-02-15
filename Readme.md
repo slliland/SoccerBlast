@@ -28,6 +28,15 @@ Built as a multi-client system:
 - Explore competitions and matches (basic)
 - Manual sync endpoint (planned): `POST /api/admin/sync/today`
 
+## Screenshots
+
+### Home Page
+<img src="https://amethyst-hollow-whale-949.mypinata.cloud/ipfs/bafybeifgfjruzja4r43jgwl4yobp6apxgfznrtkj6y64jsku52x3tempym" alt="SoccerBlast Home Page" width="900" />
+
+### Search Feature
+<img src="https://amethyst-hollow-whale-949.mypinata.cloud/ipfs/bafybeid45txeep7oqs7xhrtyuvvty3xq2pvjdkwwtoxlbsdigs7pqt6bay" alt="SoccerBlast Search Feature" width="900" />
+
+
 ## Getting Started
 
 ### Prerequisites
@@ -38,5 +47,7 @@ Built as a multi-client system:
 cd src/SoccerBlast.Api
 dotnet restore
 dotnet run
+```
 
-### Inspired by https://github.com/Raofin/CricBlast
+### Inspired by [CricBlast](https://github.com/Raofin/CricBlast)
+

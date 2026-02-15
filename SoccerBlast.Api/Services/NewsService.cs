@@ -2,6 +2,11 @@ using System.Xml.Linq;
 using Microsoft.Extensions.Caching.Memory;
 using SoccerBlast.Shared.Contracts;
 using System.Text.RegularExpressions;
+using SoccerBlast.Api.Data;
+using SoccerBlast.Api.Models;
+using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace SoccerBlast.Api.Services;
 
@@ -9,6 +14,7 @@ public class NewsService
 {
     private readonly HttpClient _http;
     private readonly IMemoryCache _cache;
+    private readonly AppDbContext _db;
 
     // Pick a few reliable football feeds (you can add/remove anytime)
     // Tip: keep it small (3–6 feeds) to avoid slowness.
@@ -21,10 +27,11 @@ public class NewsService
         ("UEFA - News", "https://www.uefa.com/rssfeed/news/")
     ];
 
-    public NewsService(HttpClient http, IMemoryCache cache)
+    public NewsService(HttpClient http, IMemoryCache cache, AppDbContext db)
     {
         _http = http;
         _cache = cache;
+        _db = db;
     }
 
     public async Task<List<NewsDto>> GetRecentAsync(int limit = 10)
@@ -47,7 +54,7 @@ public class NewsService
                 .OrderByDescending(x => x.PublishedAt ?? DateTimeOffset.MinValue)
                 .Take(limit)
                 .ToList();
-
+            await UpsertNewsAsync(all);
             return all;
         }) ?? new List<NewsDto>();
     }
@@ -215,5 +222,53 @@ public class NewsService
         if (string.IsNullOrWhiteSpace(s)) return null;
         if (DateTimeOffset.TryParse(s, out var dto)) return dto;
         return null;
+    }
+
+    private async Task UpsertNewsAsync(List<NewsDto> items)
+    {
+        if (items.Count == 0) return;
+
+        // Normalize + hash urls
+        string Norm(string url) => url.Trim();
+        string Hash(string url)
+        {
+            using var sha = SHA256.Create();
+            var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(Norm(url)));
+            return Convert.ToHexString(bytes); // e.g. "A1B2..."
+        }
+
+        var hashes = items.Select(n => Hash(n.Url)).Distinct().ToList();
+
+        var existing = await _db.NewsItems
+            .Where(x => hashes.Contains(x.UrlHash))
+            .ToDictionaryAsync(x => x.UrlHash);
+
+        foreach (var dto in items)
+        {
+            var h = Hash(dto.Url);
+            if (existing.TryGetValue(h, out var row))
+            {
+                // update
+                row.Title = dto.Title ?? "";
+                row.Source = dto.Source ?? "";
+                row.Url = dto.Url ?? "";
+                row.ThumbnailUrl = dto.ThumbnailUrl;
+                row.PublishedAtUtc = dto.PublishedAt?.UtcDateTime;
+            }
+            else
+            {
+                _db.NewsItems.Add(new NewsItem
+                {
+                    Title = dto.Title ?? "",
+                    Source = dto.Source ?? "",
+                    Url = dto.Url ?? "",
+                    ThumbnailUrl = dto.ThumbnailUrl,
+                    PublishedAtUtc = dto.PublishedAt?.UtcDateTime,
+                    UrlHash = h
+                });
+            }
+        }
+
+        await _db.SaveChangesAsync();
     }
 }
