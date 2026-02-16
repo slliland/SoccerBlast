@@ -30,11 +30,21 @@ Built as a multi-client system:
 
 ## Screenshots
 
-### Home Page
-<img src="https://amethyst-hollow-whale-949.mypinata.cloud/ipfs/bafybeifgfjruzja4r43jgwl4yobp6apxgfznrtkj6y64jsku52x3tempym" alt="SoccerBlast Home Page" width="900" />
+### Home
+<img src="https://amethyst-hollow-whale-949.mypinata.cloud/ipfs/bafybeicsojm2waf7zc4747urmc3uigmkcfyqdyinwrwh4bo67kpzmf4olu" alt="Home" width="900" />
 
-### Search Feature
-<img src="https://amethyst-hollow-whale-949.mypinata.cloud/ipfs/bafybeid45txeep7oqs7xhrtyuvvty3xq2pvjdkwwtoxlbsdigs7pqt6bay" alt="SoccerBlast Search Feature" width="900" />
+### Search
+<img src="https://amethyst-hollow-whale-949.mypinata.cloud/ipfs/bafybeihg35u55teqp4sgo4l7mrtpgqmcoypgxtcyj3nysjr37yybj3tkzq" alt="Search" width="900" />
+
+### All Matches
+<img src="https://amethyst-hollow-whale-949.mypinata.cloud/ipfs/bafybeic22walloz7rzkhj5sof2t3bh3mvsavjpmi4qyfpazdyzkfobihle" alt="All Matches" width="900" />
+
+### Following
+<img src="https://amethyst-hollow-whale-949.mypinata.cloud/ipfs/bafybeiauc6jtnbhecs7xl45sdxyljszosh2o4fwwdlllnjmskc3jxdmana" alt="Following" width="900" />
+
+### Video
+<img src="https://amethyst-hollow-whale-949.mypinata.cloud/ipfs/bafybeiagq2323rxssr2hjwzrrh237xsoiwiid5byujlg5rgfk4gc7ovabu" alt="Video" width="900" />
+
 
 
 ## Getting Started
@@ -48,6 +58,6 @@ cd src/SoccerBlast.Api
 dotnet restore
 dotnet run
 ```
-
-### Inspired by [CricBlast](https://github.com/Raofin/CricBlast)
+---
+#### Inspired by [CricBlast](https://github.com/Raofin/CricBlast)
 
