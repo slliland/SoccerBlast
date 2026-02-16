@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SoccerBlast.Api.Data;
 using Microsoft.Extensions.Options;
 using SoccerBlast.Api.Services;
+using SoccerBlast.Api.Services.Video;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,6 +36,24 @@ builder.Services.AddScoped<MatchSyncService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient<NewsService>();
 builder.Services.AddScoped<NewsService>();
+
+// Video
+// - cache
+builder.Services.AddMemoryCache();
+// outbound HTTP
+builder.Services.AddHttpClient("youtube-rss", c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(10);
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("SoccerBlast/1.0");
+}); // IHttpClientFactory best practice :contentReference[oaicite:6]{index=6}
+
+// options binding
+builder.Services.Configure<YouTubeSourceOptions>(
+    builder.Configuration.GetSection("VideoSources:YouTube"));
+
+// services
+builder.Services.AddSingleton<YouTubeRssClient>();
+builder.Services.AddSingleton<VideoAggregator>();
 
 var app = builder.Build();
 
