@@ -1,0 +1,54 @@
+.team{
+  position: relative;
+}
+
+/* Like button base */
+.sb-likebtn{
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+
+  width: 18px;
+  height: 18px;
+
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  opacity: 0;                 /* hidden by default */
+  transition: opacity 120ms ease;
+}
+
+/* Like icon size lock (prevents huge PNG rendering) */
+.sb-likeimg{
+  width: 16px;
+  height: 16px;
+  display: block;
+  object-fit: contain;
+}
+
+/* Show like button only when hovering a team */
+.team:hover .sb-likebtn{
+  opacity: 1;
+}
+
+/* If liked, always show */
+.sb-likebtn.liked{
+  opacity: 1;
+}
+
+/* Optional: tiny hover feedback */
+.sb-likebtn:hover{
+  transform: translateY(-1px);
+}
+
+/* Name row: contains team name + like button */
+.name-row{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
