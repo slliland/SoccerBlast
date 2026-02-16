@@ -169,4 +169,56 @@ public class MatchesController : ControllerBase
         var synced = await _sync.SyncLocalDateAsync(localDate.Date, tz);
         return Ok(synced);
     }
+
+    [HttpGet("range")]
+    public async Task<ActionResult<List<MatchDto>>> GetRange(
+        [FromQuery] string from,
+        [FromQuery] string to,
+        [FromQuery] int? competitionId,
+        [FromQuery] string? tz)
+    {
+        if (!DateTime.TryParseExact(from, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fromLocal) ||
+            !DateTime.TryParseExact(to, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var toLocal))
+        {
+            return BadRequest("from/to must be yyyy-MM-dd, e.g. from=2026-02-01&to=2026-02-28");
+        }
+
+        if (toLocal < fromLocal)
+            return BadRequest("to must be >= from");
+
+        tz ??= "America/New_York";
+
+        // inclusive local range: [from 00:00, (to+1) 00:00)
+        var (startUtc, _) = DateRangeService.GetUtcRangeForLocalDate(fromLocal.Date, tz);
+        var (_, endUtc) = DateRangeService.GetUtcRangeForLocalDate(toLocal.Date.AddDays(1), tz);
+
+        var res = await QueryMatches(startUtc, endUtc, competitionId);
+        return Ok(res);
+    }
+
+    [HttpPost("range")]
+    public async Task<ActionResult<int>> SyncRange(
+        [FromQuery] string from,
+        [FromQuery] string to,
+        [FromQuery] string? tz)
+    {
+        if (!DateTime.TryParseExact(from, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fromLocal) ||
+            !DateTime.TryParseExact(to, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var toLocal))
+        {
+            return BadRequest("from/to must be yyyy-MM-dd, e.g. from=2026-02-01&to=2026-02-28");
+        }
+
+        if (toLocal < fromLocal)
+            return BadRequest("to must be >= from");
+
+        tz ??= "America/New_York";
+
+        var total = 0;
+        for (var d = fromLocal.Date; d <= toLocal.Date; d = d.AddDays(1))
+        {
+            total += await _sync.SyncLocalDateAsync(d, tz);
+        }
+
+        return Ok(total);
+    }
 }
