@@ -1,0 +1,664 @@
+@page "/all"
+@using SoccerBlast.Shared.Contracts
+@using SoccerBlast.Web.Services
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Web
+@rendermode RenderMode.InteractiveServer
+
+@inject SoccerApiClient Api
+@inject BrowserTimeZone Tz
+@inject UserPrefsStore Prefs
+@inject NavigationManager Nav
+@implements IDisposable
+
+<div class="sb-page" @onclick="CloseOverlays">
+  <div class="sb-shell">
+
+    <!-- TOP BAR -->
+    <div class="sb-card sb-topbar">
+      <div class="sb-brand">
+        <img class="sb-logo" src="images/logo/soccer-blast.png" alt="Soccer Blast" />
+        <div>Soccer Blast</div>
+      </div>
+
+      <div class="sb-tabs">
+        <NavLink href="/" Match="NavLinkMatch.All">Live Scores</NavLink>
+        <NavLink href="/all" Match="NavLinkMatch.All">All Match</NavLink>
+        <NavLink href="/video">Video</NavLink>
+        <NavLink href="/news">News</NavLink>
+        <NavLink href="/stats">Stats</NavLink>
+        <NavLink href="/rankings">Rankings</NavLink>
+      </div>
+
+      <div class="sb-search" @onclick:stopPropagation="true">
+        <input class="sb-search-input"
+               placeholder="Search teams, matches, leagues, news…"
+               value="@_q"
+               @oninput="OnSearchInput"
+               @onfocus="OpenSearch" />
+
+        @if (_showSearch)
+        {
+          <div class="sb-search-pop">
+            @if (_searchLoading)
+            {
+              <div class="sb-search-row muted">Searching…</div>
+            }
+            else if (_results.Count == 0 && _q.Trim().Length >= 2)
+            {
+              <div class="sb-search-row muted">No results</div>
+            }
+            else
+            {
+              @foreach (var r in _results)
+              {
+                <a class="sb-search-row"
+                   href="@ResolveHref(r)"
+                   target="@(IsExternal(r) ? "_blank" : null)"
+                   rel="@(IsExternal(r) ? "noopener noreferrer" : null)"
+                   @onclick="CloseSearch"
+                   @onclick:stopPropagation="true">
+                  <div class="sb-search-title">@r.Title</div>
+                  <div class="sb-search-sub"><b>@r.Type</b> · @r.Subtitle</div>
+                </a>
+              }
+            }
+          </div>
+        }
+      </div>
+
+      <NavLink class="sb-avatar" title="Profile" href="/settings" @onclick:stopPropagation="true"></NavLink>
+    </div>
+
+    <!-- BODY -->
+    <div class="sb-card sb-main" style="margin-top:12px;">
+
+      <div class="section-head">
+        <div class="all-header">
+          <h4>All Matches</h4>
+          <span class="small-muted">
+            @(_hydrated ? $"Updated {_updatedLocal:HH:mm}" : "Loading…")
+          </span>
+        </div>
+
+        <div class="all-controls">
+          <div class="all-row">
+            <div class="all-range-group">
+              <span class="all-label">Range</span>
+              <input type="date" class="sb-dateinput"
+                     value="@_startDate.ToString("yyyy-MM-dd")"
+                     @onchange="OnStartChanged" />
+              <img class="am-arrow-img" src="images/all/arrow-right.png" alt="to" />
+              <input type="date" class="sb-dateinput"
+                     value="@_endDate.ToString("yyyy-MM-dd")"
+                     @onchange="OnEndChanged" />
+            </div>
+
+            <div class="all-presets">
+              <button class="btn btn-sm" @onclick="SetToday">Today</button>
+              <button class="btn btn-sm" @onclick="Set7Days">7d</button>
+              <button class="btn btn-sm" @onclick="Set30Days">30d</button>
+            </div>
+          </div>
+
+          <div class="all-row">
+            <div class="all-filter-group">
+              <span class="all-label">League</span>
+              <div class="sb-filter-custom" @onclick:stopPropagation="true">
+                <button class="sb-filter-btn" @onclick="ToggleLeagueDropdown">
+                  <span class="sb-filter-text">
+                    @(string.IsNullOrWhiteSpace(_selectedCompetitionName) ? $"All leagues ({VisibleMatchesRaw().Count})" : $"{_selectedCompetitionName} ({VisibleMatches().Count})")
+                  </span>
+                  <span class="sb-filter-arrow">▾</span>
+                </button>
+
+                @if (_showLeagueDropdown)
+                {
+                  <div class="sb-filter-menu">
+                    <button class="sb-filter-option @(string.IsNullOrWhiteSpace(_selectedCompetitionName) ? "active" : "")"
+                            @onclick='() => SelectLeague("")'>
+                      All leagues (@VisibleMatchesRaw().Count)
+                    </button>
+                    @foreach (var l in LeagueOptions())
+                    {
+                      <button class="sb-filter-option @(_selectedCompetitionName == l.Name ? "active" : "")"
+                              @onclick="() => SelectLeague(l.Name)">
+                        @l.Name (@l.Count)
+                      </button>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+
+            @if (_hydrated)
+            {
+              <div class="all-toggles">
+                <label class="sb-switch">
+                  <input type="checkbox"
+                         checked="@_prefs.FollowedTeamsOnly"
+                         @onchange="OnFollowedOnlyChanged" />
+                  <span class="sb-switch-ui"></span>
+                </label>
+                <span class="all-toggle-label">Followed teams only</span>
+
+                <label class="sb-switch">
+                  <input type="checkbox"
+                         checked="@_autoSyncEnabled"
+                         @onchange="OnAutoSyncChanged" />
+                  <span class="sb-switch-ui"></span>
+                </label>
+                <span class="all-toggle-label">
+                  Auto-sync @(_syncing ? "(syncing...)" : "")
+                </span>
+              </div>
+            }
+          </div>
+
+          @if (!string.IsNullOrWhiteSpace(_toast))
+          {
+            <div class="all-toast">@_toast</div>
+          }
+        </div>
+      </div>
+
+      @if (!_hydrated)
+      {
+        <p class="small-muted">Loading…</p>
+      }
+      else if (_loading)
+      {
+        <p class="small-muted">Loading matches…</p>
+      }
+      else if (_items.Count == 0)
+      {
+        <p class="small-muted">No matches in this range.</p>
+      }
+      else
+      {
+        @foreach (var day in GroupByLocalDay(VisibleMatches()))
+        {
+          <div class="block">
+            <div class="block-title">
+              <span>@day.Key.ToString("MMM dd, yyyy")</span>
+              <span class="small-muted">@($"{day.Value.Count} matches")</span>
+            </div>
+
+            @foreach (var comp in GroupByCompetition(day.Value))
+            {
+              <div>
+                <div class="am-league-name">@comp.Key</div>
+
+                @foreach (var m in comp.Value)
+                {
+                  <div class="am-match">
+                    <div class="am-time">@FormatLocalTime(m.UtcDate)</div>
+
+                    <div class="am-team">
+                      <img class="am-crest"
+                          src="@(string.IsNullOrWhiteSpace(m.HomeTeamCrestUrl) ? "images/teams/placeholder.png" : m.HomeTeamCrestUrl)"
+                          alt="@m.HomeTeamName"
+                          loading="lazy"
+                          decoding="async"
+                          referrerpolicy="no-referrer"
+                          onload="this.classList.add('loaded');"
+                          onerror="this.onerror=null; this.src='images/teams/placeholder.png'; this.classList.add('loaded');" />
+                      <div class="am-name-row">
+                        <div class="am-name" title="@m.HomeTeamName">@m.HomeTeamName</div>
+                        <button class="sb-likebtn @(IsLikedTeam(m.HomeTeamId) ? "liked" : "")"
+                                title="Like team"
+                                @onclick="() => ToggleLikeTeam(m.HomeTeamId)"
+                                @onclick:stopPropagation="true">
+                          <img class="sb-likeimg"
+                              src="@TeamLikeIcon(m.HomeTeamId)"
+                              alt="like" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="am-team">
+                      <img class="am-crest"
+                          src="@(string.IsNullOrWhiteSpace(m.AwayTeamCrestUrl) ? "images/teams/placeholder.png" : m.AwayTeamCrestUrl)"
+                          alt="@m.AwayTeamName"
+                          loading="lazy"
+                          decoding="async"
+                          referrerpolicy="no-referrer"
+                          onload="this.classList.add('loaded');"
+                          onerror="this.onerror=null; this.src='images/teams/placeholder.png'; this.classList.add('loaded');" />
+                      <div class="am-name-row">
+                        <div class="am-name" title="@m.AwayTeamName">@m.AwayTeamName</div>
+                        <button class="sb-likebtn @(IsLikedTeam(m.AwayTeamId) ? "liked" : "")"
+                                title="Like team"
+                                @onclick="() => ToggleLikeTeam(m.AwayTeamId)"
+                                @onclick:stopPropagation="true">
+                          <img class="sb-likeimg"
+                              src="@TeamLikeIcon(m.AwayTeamId)"
+                              alt="like" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="am-right">
+                      <div class="am-score">
+                        <span class="num">@MatchDisplayHelper.FormatScore(m.HomeScore)</span>
+                        <span class="sep">:</span>
+                        <span class="num">@MatchDisplayHelper.FormatScore(m.AwayScore)</span>
+                      </div>
+                      <div class="am-status @(MatchDisplayHelper.IsLiveStatus(m.Status) ? "live" : "")">@m.Status</div>
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
+      }
+    </div>
+  </div>
+</div>
+
+@code {
+  private bool _hydrated;
+  private bool _loading;
+  private bool _syncing;
+  private string? _toast;
+
+  private UserPrefs _prefs = new();
+  private string _tzId = "America/New_York";
+  private DateTime _updatedLocal = DateTime.Now;
+
+  // range (default last 7 days)
+  private DateOnly _startDate;
+  private DateOnly _endDate;
+
+  // all loaded matches in range
+  private readonly List<MatchDto> _items = new();
+
+  // search
+  private string _q = "";
+  private bool _showSearch;
+  private bool _searchLoading;
+  private List<SearchResultDto> _results = new();
+  private CancellationTokenSource? _searchCts;
+
+  // auto-sync
+  private bool _autoSyncEnabled = true;
+  private AutoSyncLoop? _autoSyncLoop;
+
+  // league filter
+  private string _selectedCompetitionName = ""; // "" = All
+  private bool _showLeagueDropdown = false;
+
+  protected override async Task OnAfterRenderAsync(bool firstRender)
+  {
+    if (!firstRender) return;
+
+    _tzId = await Tz.GetTimeZoneIdAsync();
+    Api.SetTimeZone(_tzId);
+
+    _prefs = await Prefs.GetAsync();
+    _prefs.FollowedTeamIds ??= new();
+
+    var today = DateOnly.FromDateTime(DateTime.Now);
+    _endDate = today;
+    _startDate = today.AddDays(-6);
+
+    _hydrated = true;
+    StateHasChanged();
+
+    // Initial load
+    await Reload();
+
+    // Start auto-sync loop (60 seconds)
+    _autoSyncLoop = new AutoSyncLoop(TimeSpan.FromSeconds(60), async _ => await AutoSyncTick());
+    if (_autoSyncEnabled)
+    {
+      _autoSyncLoop.Start();
+    }
+  }
+
+  private async Task AutoSyncTick()
+  {
+    if (_syncing || !_hydrated) return;
+
+    _syncing = true;
+    try
+    {
+      await InvokeAsync(StateHasChanged);
+
+      var daySpan = (_endDate.DayNumber - _startDate.DayNumber) + 1;
+
+      // Smart sync: if range > 7 days, only sync today + yesterday + tomorrow
+      int synced;
+      if (daySpan > 7)
+      {
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        var yesterday = today.AddDays(-1);
+        var tomorrow = today.AddDays(1);
+        
+        synced = await Api.SyncRangeAsync(yesterday, tomorrow);
+        Console.WriteLine($"[AutoSync] Large range ({daySpan}d), synced {synced} matches for {yesterday} to {tomorrow}");
+      }
+      else
+      {
+        synced = await Api.SyncRangeAsync(_startDate, _endDate);
+        Console.WriteLine($"[AutoSync] Small range ({daySpan}d), synced {synced} matches for full range");
+      }
+
+      if (synced > 0)
+      {
+        var rangeMatches = await Api.GetRangeAsync(_startDate, _endDate);
+        _items.Clear();
+        _items.AddRange(rangeMatches);
+        _updatedLocal = ConvertUtcToLocal(DateTime.UtcNow);
+        _toast = $"Auto-synced {synced} matches.";
+      }
+
+      await InvokeAsync(StateHasChanged);
+    }
+    catch (Exception ex)
+    {
+      Console.WriteLine($"[AutoSync] Error: {ex.Message}");
+    }
+    finally
+    {
+      _syncing = false;
+      await InvokeAsync(StateHasChanged);
+    }
+  }
+
+  private void OnAutoSyncChanged(ChangeEventArgs e)
+  {
+    _autoSyncEnabled = e.Value switch
+    {
+      bool b => b,
+      string s => bool.TryParse(s, out var result) && result,
+      _ => false
+    };
+
+    if (_autoSyncEnabled && _autoSyncLoop != null)
+    {
+      _autoSyncLoop.Start();
+      _toast = "Auto-sync enabled.";
+    }
+    else if (_autoSyncLoop != null)
+    {
+      _autoSyncLoop.Stop();
+      _toast = "Auto-sync disabled.";
+    }
+
+    StateHasChanged();
+  }
+
+  public void Dispose()
+  {
+    _autoSyncLoop?.Dispose();
+    _searchCts?.Cancel();
+    _searchCts?.Dispose();
+  }
+
+  private void OpenSearch() => _showSearch = true;
+  private void CloseSearch() => _showSearch = false;
+
+  private async Task OnSearchInput(ChangeEventArgs e)
+  {
+    _q = e.Value?.ToString() ?? "";
+    _showSearch = true;
+
+    _searchCts?.Cancel();
+    _searchCts?.Dispose();
+    _searchCts = new CancellationTokenSource();
+    var token = _searchCts.Token;
+
+    _searchLoading = _q.Trim().Length >= 2;
+    StateHasChanged();
+
+    try
+    {
+      await Task.Delay(250, token);
+
+      if (_q.Trim().Length < 2)
+      {
+        _searchLoading = false;
+        _results.Clear();
+        StateHasChanged();
+        return;
+      }
+
+      var res = await Api.SearchAsync(_q, 12);
+      if (token.IsCancellationRequested) return;
+
+      _results = res;
+      _searchLoading = false;
+      StateHasChanged();
+    }
+    catch (TaskCanceledException) { }
+    catch
+    {
+      _searchLoading = false;
+      StateHasChanged();
+    }
+  }
+
+  private static bool IsExternal(SearchResultDto r)
+    => r.Type == SearchResultType.News && (r.Url?.StartsWith("http", StringComparison.OrdinalIgnoreCase) ?? false);
+
+  private static string ResolveHref(SearchResultDto r)
+    => string.IsNullOrWhiteSpace(r.Url) ? "#" : r.Url!;
+
+  private void CloseOverlays()
+  {
+    _showSearch = false;
+    _showLeagueDropdown = false;
+  }
+
+  private async Task OnFollowedOnlyChanged(ChangeEventArgs e)
+  {
+    if (!_hydrated) return;
+
+    _prefs.FollowedTeamsOnly = e.Value switch
+    {
+      bool b => b,
+      string s => bool.TryParse(s, out var r) && r,
+      _ => false
+    };
+
+    await Prefs.SaveAsync(_prefs);
+    _toast = "Saved.";
+    StateHasChanged();
+  }
+
+  private async Task OnStartChanged(ChangeEventArgs e)
+  {
+    var s = e.Value?.ToString();
+    if (DateOnly.TryParse(s, out var d))
+      _startDate = d;
+
+    if (_startDate > _endDate) _endDate = _startDate;
+
+    _toast = null;
+    await Reload();
+  }
+
+  private async Task OnEndChanged(ChangeEventArgs e)
+  {
+    var s = e.Value?.ToString();
+    if (DateOnly.TryParse(s, out var d))
+      _endDate = d;
+
+    if (_endDate < _startDate) _startDate = _endDate;
+
+    _toast = null;
+    await Reload();
+  }
+
+  private async Task SetToday()
+  {
+    var today = DateOnly.FromDateTime(DateTime.Now);
+    _startDate = today;
+    _endDate = today;
+    await Reload();
+  }
+
+  private async Task Set7Days()
+  {
+    var today = DateOnly.FromDateTime(DateTime.Now);
+    _endDate = today;
+    _startDate = today.AddDays(-6);
+    await Reload();
+  }
+
+  private async Task Set30Days()
+  {
+    var today = DateOnly.FromDateTime(DateTime.Now);
+    _endDate = today;
+    _startDate = today.AddDays(-29);
+    await Reload();
+  }
+
+  private async Task Reload()
+  {
+    if (!_hydrated) return;
+
+    _loading = true;
+    _selectedCompetitionName = ""; // Reset to All leagues when range changes
+    StateHasChanged();
+
+    try
+    {
+      _items.Clear();
+
+      var rangeMatches = await Api.GetRangeAsync(_startDate, _endDate);
+      _items.AddRange(rangeMatches);
+
+      _updatedLocal = ConvertUtcToLocal(DateTime.UtcNow);
+      
+      var daySpan = (_endDate.DayNumber - _startDate.DayNumber) + 1;
+      _toast = $"Loaded {_items.Count} matches ({daySpan} days).";
+    }
+    catch (Exception ex)
+    {
+      _toast = $"Load failed: {ex.Message}";
+    }
+    finally
+    {
+      _loading = false;
+      StateHasChanged();
+    }
+  }
+
+  private sealed record LeagueOpt(string Name, int Count);
+
+  private List<LeagueOpt> LeagueOptions()
+  {
+    // build options from current visible set (before league filter),
+    // so counts still respect FollowedTeamsOnly
+    return VisibleMatchesRaw()
+        .GroupBy(m => m.CompetitionName ?? "Other")
+        .Select(g => new LeagueOpt(g.Key, g.Count()))
+        .OrderByDescending(x => x.Count)
+        .ThenBy(x => x.Name)
+        .ToList();
+  }
+
+  private void ToggleLeagueDropdown()
+  {
+    _showLeagueDropdown = !_showLeagueDropdown;
+  }
+
+  private void SelectLeague(string leagueName)
+  {
+    _selectedCompetitionName = leagueName;
+    _showLeagueDropdown = false;
+    StateHasChanged();
+  }
+
+  private async Task OnLeagueChanged(ChangeEventArgs e)
+  {
+    _selectedCompetitionName = e.Value?.ToString() ?? "";
+    StateHasChanged();
+    await Task.CompletedTask;
+  }
+
+  private List<MatchDto> VisibleMatchesRaw()
+  {
+    IEnumerable<MatchDto> q = _items;
+
+    if (_prefs.FollowedTeamsOnly && _prefs.FollowedTeamIds.Count > 0)
+      q = q.Where(m => _prefs.FollowedTeamIds.Contains(m.HomeTeamId) ||
+                       _prefs.FollowedTeamIds.Contains(m.AwayTeamId));
+
+    return q.OrderBy(m => m.UtcDate).ToList();
+  }
+
+  private List<MatchDto> VisibleMatches()
+  {
+    IEnumerable<MatchDto> q = _items;
+
+    // followed teams filter
+    if (_prefs.FollowedTeamsOnly && _prefs.FollowedTeamIds.Count > 0)
+      q = q.Where(m => _prefs.FollowedTeamIds.Contains(m.HomeTeamId) ||
+                       _prefs.FollowedTeamIds.Contains(m.AwayTeamId));
+
+    // league filter (by competition name)
+    if (!string.IsNullOrWhiteSpace(_selectedCompetitionName))
+      q = q.Where(m => string.Equals(m.CompetitionName ?? "Other",
+                                     _selectedCompetitionName,
+                                     StringComparison.Ordinal));
+
+    return q.OrderBy(m => m.UtcDate).ToList();
+  }
+
+  private Dictionary<DateOnly, List<MatchDto>> GroupByLocalDay(List<MatchDto> matches)
+  {
+    var tz = TimeZoneInfo.FindSystemTimeZoneById(_tzId);
+
+    return matches
+      .GroupBy(m =>
+      {
+        var local = TimeZoneInfo.ConvertTimeFromUtc(
+          DateTime.SpecifyKind(m.UtcDate, DateTimeKind.Utc),
+          tz
+        );
+        return DateOnly.FromDateTime(local);
+      })
+      .OrderByDescending(g => g.Key)
+      .ToDictionary(g => g.Key, g => g.ToList());
+  }
+
+  private static Dictionary<string, List<MatchDto>> GroupByCompetition(List<MatchDto> matches)
+  {
+    return matches
+      .GroupBy(m => m.CompetitionName ?? "Other")
+      .OrderBy(g => g.Key)
+      .ToDictionary(g => g.Key, g => g.ToList());
+  }
+
+  private DateTime ConvertUtcToLocal(DateTime utc)
+  {
+    var tz = TimeZoneInfo.FindSystemTimeZoneById(_tzId);
+    return TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), tz);
+  }
+
+  private string FormatLocalTime(DateTime utcDate)
+  {
+    var tz = TimeZoneInfo.FindSystemTimeZoneById(_tzId);
+    var local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utcDate, DateTimeKind.Utc), tz);
+    return local.ToString("HH:mm");
+  }
+
+  // Team like/unlike functionality
+  private bool IsLikedTeam(int teamId) 
+    => TeamLikeHelper.IsLiked(teamId, _prefs.FollowedTeamIds);
+
+  private string TeamLikeIcon(int teamId)
+    => TeamLikeHelper.GetLikeIconPath(teamId, _prefs.FollowedTeamIds);
+
+  private async Task ToggleLikeTeam(int teamId)
+  {
+    await TeamLikeHelper.ToggleLikeAsync(teamId, _prefs.FollowedTeamIds, Prefs, async () =>
+    {
+      await InvokeAsync(StateHasChanged);
+    });
+  }
+}

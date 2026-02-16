@@ -5,23 +5,26 @@
 @using Microsoft.AspNetCore.Components.Web
 @rendermode RenderMode.InteractiveServer
 @inject SoccerBlast.Web.Services.BrowserTimeZone Tz
+@inject SoccerBlast.Web.Services.UserPrefsStore Prefs
+@using Microsoft.AspNetCore.Components.Routing
+@inject NavigationManager Nav
 @implements IDisposable
 
 <div class="sb-page" @onclick="CloseOverlays">
     <div class="sb-shell">
     <div class="sb-card sb-topbar">
         <div class="sb-brand">
-        <div class="sb-dot"></div>
-        <div>Goalscore</div>
+        <img class="sb-logo" src="images/logo/soccer-blast.png" alt="Soccer Blast" />
+        <div>Soccer Blast</div>
         </div>
 
         <div class="sb-tabs">
-        <a class="active" href="/">Live Scores</a>
-        <a href="/all">All Match</a>
-        <a href="/video">Video</a>
-        <a href="/news">News</a>
-        <a href="/stats">Stats</a>
-        <a href="/rankings">Rankings</a>
+        <NavLink href="/" Match="NavLinkMatch.All">Live Scores</NavLink>
+        <NavLink href="/all">All Match</NavLink>
+        <NavLink href="/video">Video</NavLink>
+        <NavLink href="/news">News</NavLink>
+        <NavLink href="/stats">Stats</NavLink>
+        <NavLink href="/rankings">Rankings</NavLink>
         </div>
         <div class="sb-search" @onclick:stopPropagation="true">
             <input class="sb-search-input"
@@ -59,7 +62,7 @@
                 </div>
             }
             </div>
-        <div class="sb-avatar" title="Profile"></div>
+        <NavLink class="sb-avatar" title="Profile" href="/settings" @onclick:stopPropagation="true"></NavLink>
     </div>
 
     <div class="sb-grid">
@@ -192,7 +195,17 @@
                             referrerpolicy="no-referrer"
                             onload="this.classList.add('loaded');"
                             onerror="this.onerror=null; this.src='images/teams/placeholder.png'; this.classList.add('loaded');" />
-                        <div class="name">@m.HomeTeamName</div>
+                        <div class="name-row">
+                            <div class="name" title="@m.HomeTeamName">@m.HomeTeamName</div>
+                            <button class="sb-likebtn @(IsLikedTeam(m.HomeTeamId) ? "liked" : "")"
+                                    title="Like team"
+                                    @onclick="() => ToggleLikeTeam(m.HomeTeamId)"
+                                    @onclick:stopPropagation="true">
+                                <img class="sb-likeimg"
+                                    src="@TeamLikeIcon(m.HomeTeamId)"
+                                    alt="like" />
+                            </button>
+                        </div>
                     </div>
 
                     <div class="team">
@@ -204,16 +217,26 @@
                             referrerpolicy="no-referrer"
                             onload="this.classList.add('loaded');"
                             onerror="this.onerror=null; this.src='images/teams/placeholder.png'; this.classList.add('loaded');" />
-                        <div class="name">@m.AwayTeamName</div>
+                        <div class="name-row">
+                            <div class="name" title="@m.AwayTeamName">@m.AwayTeamName</div>
+                            <button class="sb-likebtn @(IsLikedTeam(m.AwayTeamId) ? "liked" : "")"
+                                    title="Like team"
+                                    @onclick="() => ToggleLikeTeam(m.AwayTeamId)"
+                                    @onclick:stopPropagation="true">
+                                <img class="sb-likeimg"
+                                    src="@TeamLikeIcon(m.AwayTeamId)"
+                                    alt="like" />
+                            </button>
+                        </div>
                     </div>
 
 
                     <div class="score">
-                    <div class="num">@Score(m.HomeScore)</div>
+                    <div class="num">@MatchDisplayHelper.FormatScore(m.HomeScore)</div>
                     <div class="num">:</div>
-                    <div class="num">@Score(m.AwayScore)</div>
+                    <div class="num">@MatchDisplayHelper.FormatScore(m.AwayScore)</div>
 
-                    <div class="status @(IsLive(m.Status) ? "live" : "")">
+                    <div class="status @(MatchDisplayHelper.IsLiveStatus(m.Status) ? "live" : "")">
                         @m.Status
                     </div>
                     </div>
@@ -245,7 +268,7 @@
                 <p class="news-title">
                     <a href="@n.Url" target="_blank" rel="noopener noreferrer">@n.Title</a>
                 </p>
-                <div class="news-meta">@n.Source • @RelativeTime(n.PublishedAt)</div>
+                <div class="news-meta">@n.Source • @MatchDisplayHelper.FormatRelativeTime(n.PublishedAt)</div>
                 </div>
             </div>
         }
@@ -257,9 +280,9 @@
 @code {
   private bool _loading = true;
 
-  private bool _syncing = false;
+  <!-- private bool _syncing = false; -->
   private string? _toast;
-  private SyncStatus? _status;
+  <!-- private SyncStatus? _status; -->
 
   private DateOnly _viewDate;
   private List<MatchDto> _matches = new();
@@ -270,9 +293,9 @@
   // news
   private List<NewsDto> _news = new();
   private DateTime _nowLocal = DateTime.Now;
-  private PeriodicTimer? _clockTimer;
-  private PeriodicTimer? _newsTimer;
-  private CancellationTokenSource? _loopCts;
+  private AutoSyncLoop? _clockLoop;
+  private AutoSyncLoop? _newsLoop;
+  private AutoSyncLoop? _matchLoop;
 
   // calendar  
   private bool _showCalendar;
@@ -280,7 +303,6 @@
   private static readonly string[] _dow = ["Su","Mo","Tu","We","Th","Fr","Sa"];
 
   // sync matches
-  private PeriodicTimer? _matchTimer;
   private DateTime _matchesUpdatedLocal = DateTime.Now;
 
   // search
@@ -292,6 +314,52 @@
 
   private void OpenSearch() => _showSearch = true;
   private void CloseSearch() => _showSearch = false;
+
+  // like/unlike team
+  private bool IsLikedTeam(int teamId) 
+    => TeamLikeHelper.IsLiked(teamId, _prefs.FollowedTeamIds);
+
+  private string TeamLikeIcon(int teamId)
+    => TeamLikeHelper.GetLikeIconPath(teamId, _prefs.FollowedTeamIds);
+
+  private async Task ToggleLikeTeam(int teamId)
+  {
+    await TeamLikeHelper.ToggleLikeAsync(teamId, _prefs.FollowedTeamIds, Prefs, async () =>
+    {
+      await InvokeAsync(StateHasChanged);
+    });
+  }
+
+  private string? _lastPath;
+
+  protected override void OnInitialized()
+  {
+    _lastPath = new Uri(Nav.Uri).AbsolutePath;
+    Nav.LocationChanged += OnLocationChanged;
+  }
+
+  private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+  {
+    if (!_hydrated) return;
+
+    var path = new Uri(e.Location).AbsolutePath;
+
+    // only reload when returning to "/"
+    if (path == "/")
+    {
+        try
+        {
+            var prefs = await Prefs.GetAsync();
+            await InvokeAsync(() =>
+            {
+                _prefs = prefs;
+                StateHasChanged();
+            });
+        }
+        catch { }
+    } 
+  }
+
 
   private async Task OnSearchInput(ChangeEventArgs e)
   {
@@ -404,6 +472,8 @@
     return cls;
   }
 
+  private UserPrefs _prefs = new();
+  private bool _hydrated;
 
   protected override async Task OnAfterRenderAsync(bool firstRender)
   {
@@ -413,13 +483,15 @@
     _nowLocal = ConvertUtcToLocal(DateTime.UtcNow);
     Api.SetTimeZone(_tzId);
 
+    _prefs = await Prefs.GetAsync();
     _viewDate = DateOnly.FromDateTime(DateTime.Now);
 
-    // start timers AFTER tz is known
-    StartLoops();
+    _hydrated = true;
 
+    StartLoops();
     await LoadForDate(_viewDate);
   }
+
 
   private DateTime ConvertUtcToLocal(DateTime utc)
   {
@@ -427,91 +499,58 @@
     return TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), tz);
   } 
 
-  private bool _loopsStarted;
-
   private void StartLoops()
   {
-    if (_loopsStarted) return;
-    _loopsStarted = true;
-    _loopCts?.Cancel();
-    _loopCts?.Dispose();
-    _loopCts = new CancellationTokenSource();
-
-    _matchTimer = new PeriodicTimer(TimeSpan.FromSeconds(60));
-    _ = Task.Run(async () =>
-   {
-    try
+    // Match sync loop - refresh current date every 60s
+    _matchLoop = new AutoSyncLoop(TimeSpan.FromSeconds(60), async _ =>
     {
-         while (await _matchTimer.WaitForNextTickAsync(_loopCts.Token))
-         {
-             // sync + reload current date
-             var d = _viewDate;
-             await Api.SyncByLocalDateAsync(d);
-             var fresh = await Api.GetByLocalDateAsync(d);
-             await InvokeAsync(() =>
-             {
-                _matches = fresh;
-                _leagues = BuildLeagues(_matches);
-                _matchesUpdatedLocal = ConvertUtcToLocal(DateTime.UtcNow);
-                StateHasChanged();
-             });
-         }
-     }
-     catch { /* ignore */ }
-    });
-
-    // news: clock tick (every 10s so header updates)
-    _clockTimer = new PeriodicTimer(TimeSpan.FromSeconds(10));
-    _ = Task.Run(async () =>
-    {
-        try
+        var d = _viewDate;
+        await Api.SyncByLocalDateAsync(d);
+        var fresh = await Api.GetByLocalDateAsync(d);
+        await InvokeAsync(() =>
         {
-            while (await _clockTimer.WaitForNextTickAsync(_loopCts.Token))
-            {
-                await InvokeAsync(() =>
-                {
-                    _nowLocal = ConvertUtcToLocal(DateTime.UtcNow);
-                    StateHasChanged();
-                });
-            }
-        }
-        catch { /* ignore */ }
+            _matches = fresh;
+            _leagues = BuildLeagues(_matches);
+            _matchesUpdatedLocal = ConvertUtcToLocal(DateTime.UtcNow);
+            StateHasChanged();
+        });
     });
+    _matchLoop.Start();
 
-    // news refresh (every 60s; adjust to taste)
-    _newsTimer = new PeriodicTimer(TimeSpan.FromSeconds(60));
-    _ = Task.Run(async () =>
+    // Clock loop - update time display every 10s
+    _clockLoop = new AutoSyncLoop(TimeSpan.FromSeconds(10), async _ =>
     {
-        try
+        await InvokeAsync(() =>
         {
-            while (await _newsTimer.WaitForNextTickAsync(_loopCts.Token))
-            {
-                var news = await Api.GetRecentNewsAsync(10);
-                await InvokeAsync(() =>
-                {
-                    _news = news;
-                    StateHasChanged();
-                });
-            }
-        }
-        catch { /* ignore */ }
+            _nowLocal = ConvertUtcToLocal(DateTime.UtcNow);
+            StateHasChanged();
+        });
     });
+    _clockLoop.Start();
+
+    // News refresh loop - fetch news every 60s
+    _newsLoop = new AutoSyncLoop(TimeSpan.FromSeconds(60), async _ =>
+    {
+        var news = await Api.GetRecentNewsAsync(10);
+        await InvokeAsync(() =>
+        {
+            _news = news;
+            StateHasChanged();
+        });
+    });
+    _newsLoop.Start();
   }
 
   public void Dispose()
   {
-    _loopsStarted = false;
-    try
-    {
-        _loopCts?.Cancel();
-        _loopCts?.Dispose();
-        _clockTimer?.Dispose();
-        _newsTimer?.Dispose();
-        _matchTimer?.Dispose();
-        _searchCts?.Cancel();
-        _searchCts?.Dispose();
-    }
-    catch { /* ignore */ }
+    Nav.LocationChanged -= OnLocationChanged;
+    
+    _matchLoop?.Dispose();
+    _clockLoop?.Dispose();
+    _newsLoop?.Dispose();
+    
+    _searchCts?.Cancel();
+    _searchCts?.Dispose();
   }
 
   private async Task LoadForDate(DateOnly d)
@@ -592,14 +631,17 @@
 
   private List<MatchDto> VisibleMatches()
   {
-    if (_selectedCompetitionId == -1) return _matches;
-    return _matches.Where(m => m.CompetitionId == _selectedCompetitionId).ToList();
+    IEnumerable<MatchDto> q = _matches;
+
+    if (_selectedCompetitionId != -1)
+        q = q.Where(m => m.CompetitionId == _selectedCompetitionId);
+
+    if (_prefs.FollowedTeamsOnly && _prefs.FollowedTeamIds.Count > 0)
+        q = q.Where(m => _prefs.FollowedTeamIds.Contains(m.HomeTeamId) ||
+                         _prefs.FollowedTeamIds.Contains(m.AwayTeamId));
+
+    return q.ToList();
   }
-
-  private static string Score(int? s) => s.HasValue ? s.Value.ToString() : "-";
-
-  private static bool IsLive(string? status)
-    => status is "IN_PLAY" or "PAUSED" or "LIVE";
 
   private string _tzId = "America/New_York";
 
@@ -614,7 +656,6 @@
     return local.ToString("HH:mm");
   }
 
-
   private static Dictionary<string, List<MatchDto>> GroupByCompetition(List<MatchDto> matches)
   {
     return matches
@@ -622,18 +663,6 @@
       .OrderBy(g => g.Key)
       .ToDictionary(g => g.Key, g => g.ToList());
   }
-
-  private static string RelativeTime(DateTimeOffset? t)
-  {
-    if (t == null) return "recent";
-    var delta = DateTimeOffset.UtcNow - t.Value.ToUniversalTime();
-
-    if (delta.TotalMinutes < 1) return "just now";
-    if (delta.TotalHours < 1) return $"{(int)delta.TotalMinutes} min ago";
-    if (delta.TotalDays < 1) return $"{(int)delta.TotalHours} hours ago";
-    return $"{(int)delta.TotalDays} days ago";
-  }
-
 
   private static List<LeagueDto> BuildLeagues(List<MatchDto> matches)
   {
@@ -644,75 +673,11 @@
             CompetitionId = g.Key.CompetitionId,
             Name = g.Key.CompetitionName ?? "Other",
             MatchCount = g.Count(),
-            LiveCount = g.Count(x => x.Status is "IN_PLAY" or "PAUSED" or "LIVE")
+            LiveCount = g.Count(x => MatchDisplayHelper.IsLiveStatus(x.Status))
         })
         .OrderByDescending(x => x.LiveCount)
         .ThenByDescending(x => x.MatchCount)
         .ThenBy(x => x.Name)
         .ToList();
-  }
-
-  private static string LeagueLogoPath(string? name)
-  {
-    name ??= "";
-
-    // England
-    if (name.Contains("Premier League", StringComparison.OrdinalIgnoreCase))
-        return "images/leagues/premier-league.svg";
-
-    if (name.Contains("Championship", StringComparison.OrdinalIgnoreCase) ||
-        name.Contains("EFL Championship", StringComparison.OrdinalIgnoreCase))
-        return "images/leagues/championship.svg";
-
-    // Germany
-    if (name.Contains("Bundesliga", StringComparison.OrdinalIgnoreCase))
-        return "images/leagues/bundesliga.svg";
-
-    // Spain
-    if (name.Contains("LaLiga", StringComparison.OrdinalIgnoreCase) ||
-        name.Contains("Primera Division", StringComparison.OrdinalIgnoreCase) ||
-        name.Contains("Primera División", StringComparison.OrdinalIgnoreCase) ||
-        name.Contains("La Liga", StringComparison.OrdinalIgnoreCase))
-        return "images/leagues/laliga.svg";
-
-    // Portugal
-    if (name.Contains("Primeira Liga", StringComparison.OrdinalIgnoreCase) ||
-        name.Contains("Liga Portugal", StringComparison.OrdinalIgnoreCase))
-        return "images/leagues/primeira-liga.svg";
-
-    // Italy
-    if (name.Contains("Serie A", StringComparison.OrdinalIgnoreCase))
-        return "images/leagues/serie-a.svg";
-
-    // Netherlands
-    if (name.Contains("Eredivisie", StringComparison.OrdinalIgnoreCase))
-        return "images/leagues/eredivisie.svg";
-
-    // France
-    if (name.Contains("Ligue 1", StringComparison.OrdinalIgnoreCase))
-        return "images/leagues/ligue1.svg";
-
-    // Brazil
-    if (name.Contains("Campeonato Brasileiro", StringComparison.OrdinalIgnoreCase) ||
-        name.Contains("Brasileirão", StringComparison.OrdinalIgnoreCase) ||
-        name.Contains("Serie A", StringComparison.OrdinalIgnoreCase) && name.Contains("Brasile", StringComparison.OrdinalIgnoreCase))
-        return "images/leagues/brasileirao.svg";
-
-    // South America
-    if (name.Contains("Copa Libertadores", StringComparison.OrdinalIgnoreCase) ||
-        name.Contains("CONMEBOL Libertadores", StringComparison.OrdinalIgnoreCase))
-        return "images/leagues/libertadores.svg";
-
-    // UEFA cups
-    if (name.Contains("Champions League", StringComparison.OrdinalIgnoreCase))
-        return "images/leagues/ucl.svg";
-
-    if (name.Contains("Europa League", StringComparison.OrdinalIgnoreCase))
-        return "images/leagues/uel.svg";
-
-    if (name.Contains("Conference League", StringComparison.OrdinalIgnoreCase))
-        return "images/leagues/uecl.svg";
-
-    return "images/leagues/ball.svg";
   }
 }

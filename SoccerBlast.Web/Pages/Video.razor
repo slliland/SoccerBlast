@@ -1,0 +1,465 @@
+@page "/video"
+@using SoccerBlast.Shared.Contracts
+@using SoccerBlast.Web.Services
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Web
+@inject NavigationManager Nav
+@rendermode RenderMode.InteractiveServer
+@implements IDisposable
+
+@inject SoccerBlast.Web.Services.Video.IVideoSource VideoSource
+
+<div class="sb-page">
+  <div class="sb-shell">
+
+    <div class="sb-card sb-topbar">
+      <div class="sb-brand">
+        <img class="sb-logo" src="images/logo/soccer-blast.png" alt="Soccer Blast" />
+        <div>Soccer Blast</div>
+      </div>
+
+      <div class="sb-tabs">
+        <NavLink href="/" Match="NavLinkMatch.All">Live Scores</NavLink>
+        <NavLink href="/all">All Match</NavLink>
+        <NavLink href="/video">Video</NavLink>
+        <NavLink href="/news">News</NavLink>
+        <NavLink href="/stats">Stats</NavLink>
+        <NavLink href="/rankings">Rankings</NavLink>
+      </div>
+
+      <div class="sb-search">
+        <input class="sb-search-input"
+                placeholder="Search videos…"
+                value="@_q"
+                @oninput="OnQ" />
+      </div>
+
+      <NavLink class="sb-avatar" title="Profile" href="/settings"></NavLink>
+    </div>
+
+    <div class="sb-card sb-video">
+      <div class="sb-video-head">
+        <div>
+          <h4 style="margin:0;">Videos</h4>
+          <div class="small-muted">
+            @(_loading ? "Loading…" : $"{_filtered.Count} videos • Updated {_updatedLocal:HH:mm}")
+          </div>
+        </div>
+
+        <div class="sb-video-controls">
+          <select class="sb-video-select" value="@(_competitionId?.ToString() ?? "")" @onchange="OnLeague">
+            <option value="">All leagues</option>
+            @foreach (var l in _leagues)
+            {
+                <option value="@l.Id">@l.Name</option>
+            }
+          </select>
+          <select class="sb-video-select" value="@_source" @onchange="OnSource">
+            <option value="">All sources</option>
+            @foreach (var s in _sources)
+            {
+                <option value="@s">@s</option>
+            }
+          </select>
+          <select class="sb-video-select" value="@_tag" @onchange="OnTag">
+            <option value="">All tags</option>
+            @foreach (var t in _tags)
+            {
+                <option value="@t">@t</option>
+            }
+          </select>
+          <select class="sb-video-select" value="@_sort" @onchange="OnSort">
+            <option value="new">Newest</option>
+            <option value="old">Oldest</option>
+            <option value="title">Title</option>
+          </select>
+        </div>
+      </div>
+
+      @if (_loading)
+      {
+        <p class="small-muted" style="margin:12px 0 0;">Loading videos…</p>
+      }
+      else if (_filtered.Count == 0)
+      {
+        <p class="small-muted" style="margin:12px 0 0;">No videos found.</p>
+      }
+      else
+      {
+        <div class="sb-video-grid">
+          @foreach (var v in _paged)
+          {
+            <button class="sb-video-card" @onclick="() => Open(v)">
+              <div class="sb-video-thumb">
+                <img src="@Thumb(v)" alt="" loading="lazy" referrerpolicy="no-referrer"
+                     onerror="this.onerror=null; this.src='images/news/placeholder.png';" />
+                <div class="sb-video-badge">▶</div>
+              </div>
+
+              <div class="sb-video-meta">
+                <div class="sb-video-title" title="@v.Title">@v.Title</div>
+                <div class="sb-video-sub">
+                  <span>@(v.CompetitionName ?? "Highlights")</span>
+                  <span>•</span>
+                  <span>@MatchDisplayHelper.FormatRelativeTime(v.PublishedAtUtc)</span>
+                </div>
+              </div>
+            </button>
+          }
+        </div>
+
+        @if (_filtered.Count > _pageSize)
+        {
+          <div class="sb-video-more">
+            <button class="btn" @onclick="LoadMore" disabled="@(_paged.Count >= _filtered.Count)">
+              Load more
+            </button>
+          </div>
+        }
+      }
+    </div>
+
+    @if (_open is not null)
+    {
+      <div class="sb-modal" @onclick="Close">
+        <div class="sb-modal-card" @onclick:stopPropagation="true">
+          <div class="sb-modal-head">
+            <div class="sb-modal-title">@_open.Title</div>
+            <button class="sb-x" @onclick="Close">✕</button>
+          </div>
+
+          <div class="sb-player">
+            <div class="sb-player-hint">
+                If the player fails, this video likely blocks embedding.
+                <a class="sb-link" href="@_open.Url" target="_blank" rel="noopener noreferrer">Open on YouTube</a>
+            </div>
+            <iframe src="@Embed(_open)"
+                    title="@_open.Title"
+                    referrerpolicy="strict-origin-when-cross-origin"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowfullscreen
+                    loading="lazy">
+            </iframe>
+          </div>
+
+          <div class="sb-modal-foot">
+            <a class="sb-link" href="@_open.Url" target="_blank" rel="noopener noreferrer">Open source</a>
+            <span class="small-muted">@(_open.Source ?? "")</span>
+          </div>
+        </div>
+      </div>
+    }
+  </div>
+</div>
+
+@code {
+  private bool _loading = true;
+
+  private List<VideoDto> _all = new();
+  private List<VideoDto> _filtered = new();
+  private List<(int Id, string Name)> _leagues = new();
+  private int? _competitionId = null; // null = all
+  private string _source = "";        // "" = all
+  private string _tag = "";           // "" = all
+  private CancellationTokenSource? _debounceCts;
+
+  private string _q = "";
+  private string _sort = "new";
+
+  private int _pageSize = 24;
+  private int _page = 1;
+  private List<VideoDto> _paged = new();
+
+  private VideoDto? _open;
+
+  // Auto sync
+  private AutoSyncLoop? _videoLoop;
+  private DateTime _updatedLocal = DateTime.Now;
+  private volatile bool _refreshing;
+
+  private void BuildOptions()
+  {
+    _leagues = _all
+        .Where(v => v.CompetitionId is not null && !string.IsNullOrWhiteSpace(v.CompetitionName))
+        .GroupBy(v => v.CompetitionId!.Value)
+        .Select(g => (Id: g.Key, Name: g.Select(x => x.CompetitionName!).First()))
+        .OrderBy(x => x.Name)
+        .ToList();
+
+    _sources = _all
+        .Select(v => v.Source)
+        .Where(s => !string.IsNullOrWhiteSpace(s))
+        .Select(s => s!)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(s => s)
+        .ToList();
+
+    _tags = _all
+        .SelectMany(v => v.Tags ?? Array.Empty<string>())
+        .Where(t => !string.IsNullOrWhiteSpace(t))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(t => t)
+        .ToList();
+  }
+
+  private List<string> _sources = new();
+  private List<string> _tags = new();
+
+  private async Task ReloadAsync(CancellationToken ct = default)
+  {
+    if (_refreshing) return;
+    _refreshing = true;
+    _loading = true;
+    StateHasChanged();
+
+    try
+    {
+        _all = (await VideoSource.GetRecentAsync(
+            limit: 200,
+            competitionId: _competitionId,
+            tag: string.IsNullOrWhiteSpace(_tag) ? null : _tag,
+            q: string.IsNullOrWhiteSpace(_q) ? null : _q,
+            source: string.IsNullOrWhiteSpace(_source) ? null : _source,
+            sinceUtc: null,
+            ct: ct)).ToList();
+
+        BuildOptions();
+        ApplySortAndPagingOnly();
+    }
+    finally
+    {
+        _loading = false;
+        _refreshing = false;
+        StateHasChanged();
+    }
+  }
+
+  private void ApplySortAndPagingOnly()
+  {
+    IEnumerable<VideoDto> q = _all;
+
+    q = _sort switch
+    {
+        "old" => q.OrderBy(v => v.PublishedAtUtc),
+        "title" => q.OrderBy(v => v.Title),
+        _ => q.OrderByDescending(v => v.PublishedAtUtc),
+    };
+
+    _filtered = q.ToList();
+    _page = 1;
+    BuildPaged();
+  }
+
+
+
+  protected override async Task OnInitializedAsync()
+  {
+    await ReloadAsync();
+    StartVideoLoop();
+  }
+
+  private void StartVideoLoop()
+  {
+    _videoLoop?.Dispose();
+
+    _videoLoop = new AutoSyncLoop(TimeSpan.FromSeconds(60), async ct =>
+    {
+        if (_refreshing) return;
+
+        await RefreshQuietAsync(ct);
+    });
+
+    _videoLoop.Start();
+  }
+
+  private async Task RefreshQuietAsync(CancellationToken ct)
+  {
+    try
+    {
+        _refreshing = true;
+
+        var fresh = (await VideoSource.GetRecentAsync(
+            limit: 200,
+            competitionId: _competitionId,
+            tag: string.IsNullOrWhiteSpace(_tag) ? null : _tag,
+            q: string.IsNullOrWhiteSpace(_q) ? null : _q,
+            source: string.IsNullOrWhiteSpace(_source) ? null : _source,
+            sinceUtc: null,
+            ct: ct)).ToList();
+
+        // Update state on UI thread
+        await InvokeAsync(() =>
+        {
+            _all = fresh;
+
+            // rebuild dropdown options, but KEEP current selections
+            BuildOptions();
+
+            // if current selected source/tag/league disappeared, fall back to "All"
+            if (!string.IsNullOrWhiteSpace(_source) && !_sources.Contains(_source, StringComparer.OrdinalIgnoreCase))
+                _source = "";
+            if (!string.IsNullOrWhiteSpace(_tag) && !_tags.Contains(_tag, StringComparer.OrdinalIgnoreCase))
+                _tag = "";
+            if (_competitionId is not null && !_leagues.Any(x => x.Id == _competitionId.Value))
+                _competitionId = null;
+
+            // Keep pagination position, but clamp
+            ApplySortAndPagingOnly();
+            _updatedLocal = DateTime.Now;
+
+            StateHasChanged();
+        });
+    }
+    catch
+    {}
+    finally
+    {
+        _refreshing = false;
+    }
+  }
+
+  private void BuildPaged()
+  {
+    _paged = _filtered.Take(_page * _pageSize).ToList();
+  }
+
+  private void LoadMore()
+  {
+    _page++;
+    BuildPaged();
+  }
+
+  public void Dispose()
+  {
+    _videoLoop?.Dispose();
+    _debounceCts?.Cancel();
+    _debounceCts?.Dispose();
+  }
+
+  private async Task OnQ(ChangeEventArgs e)
+  {
+    _q = e.Value?.ToString() ?? "";
+
+    _debounceCts?.Cancel();
+    _debounceCts?.Dispose();
+    _debounceCts = new CancellationTokenSource();
+    var token = _debounceCts.Token;
+
+    try
+    {
+        await Task.Delay(250, token); // debounce
+        await ReloadAsync(token);
+    }
+    catch (TaskCanceledException) { }
+  }
+
+  private async Task OnLeague(ChangeEventArgs e)
+  {
+    var s = e.Value?.ToString() ?? "";
+    _competitionId = int.TryParse(s, out var id) ? id : null;
+    await ReloadAsync();
+  }
+
+  private async Task OnSource(ChangeEventArgs e)
+  {
+    _source = e.Value?.ToString() ?? "";
+    await ReloadAsync();
+  }
+
+  private async Task OnTag(ChangeEventArgs e)
+  {
+    _tag = e.Value?.ToString() ?? "";
+    await ReloadAsync();
+  }
+
+  private Task OnSort(ChangeEventArgs e)
+  {
+    _sort = e.Value?.ToString() ?? "new";
+    ApplySortAndPagingOnly();
+    return Task.CompletedTask;
+  }
+
+
+  private void Open(VideoDto v) => _open = v;
+  private void Close() => _open = null;
+
+  private static string Thumb(VideoDto v)
+    => !string.IsNullOrWhiteSpace(v.ThumbnailUrl) ? v.ThumbnailUrl!
+     : "images/news/placeholder.png";
+
+  private string Embed(VideoDto v)
+  {
+    // If backend later provides EmbedUrl, prefer it
+    if (!string.IsNullOrWhiteSpace(v.EmbedUrl))
+        return v.EmbedUrl!;
+
+    // YouTube: build a safe embed URL with improved parameters
+    if (v.Provider == VideoProvider.YouTube)
+    {
+        var id = TryGetYouTubeId(v.Url);
+        if (!string.IsNullOrWhiteSpace(id))
+        {
+            // Use youtube-nocookie for privacy + enhanced parameters
+            // autoplay=1: Start playing when modal opens
+            // rel=0: Don't show related videos from other channels
+            // modestbranding=1: Minimal YouTube branding
+            // playsinline=1: Better mobile experience
+            // enablejsapi=1: Enable JavaScript API for better control
+            var origin = Uri.EscapeDataString(Nav.BaseUri.TrimEnd('/'));
+            return $"https://www.youtube-nocookie.com/embed/{id}?autoplay=1&rel=0&modestbranding=1&playsinline=1&enablejsapi=1&origin={origin}";
+        }
+    }
+
+    // fallback: just open url inside iframe if it's embeddable (some providers are)
+    return v.Url;
+  }
+
+  private static string? TryGetYouTubeId(string url)
+  {
+    if (string.IsNullOrWhiteSpace(url)) return null;
+    if (!Uri.TryCreate(url, UriKind.Absolute, out var u)) return null;
+
+    var host = u.Host.ToLowerInvariant();
+
+    if (host.Contains("youtu.be"))
+    {
+        var seg = u.AbsolutePath.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        return string.IsNullOrWhiteSpace(seg) ? null : seg;
+    }
+
+    if (host.Contains("youtube.com"))
+    {
+        var path = u.AbsolutePath.Trim('/');
+
+        if (path.StartsWith("embed/", StringComparison.OrdinalIgnoreCase))
+            return path.Substring("embed/".Length).Split('/')[0];
+
+        if (path.StartsWith("shorts/", StringComparison.OrdinalIgnoreCase))
+            return path.Substring("shorts/".Length).Split('/')[0];
+
+        // watch?v=
+        var q = ParseQuery(u.Query);
+        if (q.TryGetValue("v", out var v) && !string.IsNullOrWhiteSpace(v))
+            return v;
+    }
+
+    return null;
+  }
+
+  private static Dictionary<string, string> ParseQuery(string query)
+  {
+    var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    if (string.IsNullOrWhiteSpace(query)) return dict;
+
+    var s = query.StartsWith("?") ? query.Substring(1) : query;
+    foreach (var part in s.Split('&', StringSplitOptions.RemoveEmptyEntries))
+    {
+        var kv = part.Split('=', 2);
+        var key = Uri.UnescapeDataString(kv[0]);
+        var val = kv.Length > 1 ? Uri.UnescapeDataString(kv[1]) : "";
+        if (!string.IsNullOrWhiteSpace(key))
+            dict[key] = val;
+    }
+    return dict;
+  }
+}

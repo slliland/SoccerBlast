@@ -1,8 +1,251 @@
 @page "/settings"
+@using SoccerBlast.Web.Services
+@using SoccerBlast.Shared.Contracts
+@inject UserPrefsStore Prefs
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Web
+@inject NavigationManager Nav
+@rendermode RenderMode.InteractiveServer
 
-<h3>Settings</h3>
+<div class="sb-page sb-settings-page" @onclick="OnPageClick">
+    <div class="sb-shell">
 
-<label style="display:flex; gap:10px; align-items:center;">
-  <input type="checkbox" />
-  <span>Compact mode</span>
-</label>
+        <div class="sb-settings-head">
+            <button class="sb-back" @onclick="Back" @onclick:preventDefault="false" title="Back">Back</button>
+
+            <div class="sb-settings-titlewrap">
+                <h2 class="sb-settings-title">Profile & Settings</h2>
+                <div class="sb-settings-sub">
+                    Not signed in. Your preferences are saved on this device.
+                </div>
+            </div>
+
+            <div class="sb-settings-avatar" title="Profile"></div>
+        </div>
+
+        <div class="sb-settings-grid">
+
+            @if (!_hydrated)
+            {
+                <div class="sb-card sb-settings-card">
+                    <p class="small-muted">Loading settings...</p>
+                </div>
+            }
+            else
+            {
+            <div class="sb-card sb-settings-card">
+                <div class="sb-settings-section">
+                    <div class="sb-settings-section-title">Match View</div>
+
+                    <div class="sb-settings-row">
+                        <div class="sb-settings-label">
+                            <div class="sb-settings-label-title">Default view mode</div>
+                            <div class="sb-settings-label-sub">Choose how matches render by default.</div>
+                        </div>
+
+                        <select class="sb-settings-select"
+                                value="@(_prefs.DefaultViewMode ?? "Cards")"
+                                @onchange="OnDefaultViewModeChanged">
+                            <option value="Cards">Cards</option>
+                            <option value="Timeline">Timeline</option>
+                        </select>
+                    </div>
+
+                    <div class="sb-settings-row">
+                        <div class="sb-settings-label">
+                            <div class="sb-settings-label-title">Show followed teams only</div>
+                            <div class="sb-settings-label-sub">Only show matches that include teams you follow.</div>
+                        </div>
+
+                        <label class="sb-switch" @onclick:stopPropagation="true">
+                            <input type="checkbox"
+                                   checked="@_prefs.FollowedTeamsOnly"
+                                   @onchange="OnFollowedTeamsOnlyChanged"
+                                   @onclick:stopPropagation="true" />
+                            <span class="sb-switch-ui"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="sb-settings-divider"></div>
+
+                <div class="sb-settings-section">
+                    <div class="sb-settings-section-title">Leagues</div>
+
+                    <div class="sb-settings-row">
+                        <div class="sb-settings-label">
+                            <div class="sb-settings-label-title">Pinned leagues first</div>
+                            <div class="sb-settings-label-sub">Pinned leagues will be shown at the top of lists.</div>
+                        </div>
+
+                        <label class="sb-switch">
+                            <input type="checkbox"
+                                   checked="@_prefs.PinnedLeaguesFirst"
+                                   @onchange="OnPinnedLeaguesFirstChanged" />
+                            <span class="sb-switch-ui"></span>
+                        </label>
+                    </div>
+
+                    <div class="sb-settings-hint">
+                        Pin leagues from the league list (we’ll add the pin button next).
+                    </div>
+                </div>
+
+                <div class="sb-settings-divider"></div>
+
+                <div class="sb-settings-section">
+                    <div class="sb-settings-section-title">Refresh</div>
+
+                    <div class="sb-settings-row">
+                        <div class="sb-settings-label">
+                            <div class="sb-settings-label-title">Smart refresh</div>
+                            <div class="sb-settings-label-sub">Refresh frequently only when live matches exist.</div>
+                        </div>
+
+                        <label class="sb-switch">
+                            <input type="checkbox"
+                                   checked="@_prefs.SmartRefresh"
+                                   @onchange="OnSmartRefreshChanged" />
+                            <span class="sb-switch-ui"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="sb-settings-actions">
+                    <button class="btn" type="button" @onclick="Save" @onclick:stopPropagation="true">Save</button>
+                    <button class="btn" type="button" @onclick="Reset" @onclick:stopPropagation="true">Reset</button>
+
+                    @if (!string.IsNullOrWhiteSpace(_toast))
+                    {
+                        <span class="sb-settings-toast">@_toast</span>
+                    }
+                </div>
+            </div>
+
+            <div class="sb-settings-right">
+                <div class="sb-card sb-settings-sidecard">
+                    <div class="sb-settings-side-title">Coming soon</div>
+                    <div class="small-muted">
+                        Sign in with Google/GitHub to sync settings across devices and follow teams everywhere.
+                    </div>
+
+                    <div class="sb-settings-side-actions">
+                        <button class="btn" disabled title="Coming soon">Sign in</button>
+                    </div>
+                </div>
+
+                <div class="sb-card sb-settings-sidecard" style="margin-top:12px;">
+                    <div class="sb-settings-side-title">Tips</div>
+                    <div class="small-muted">
+                        Follow teams on match rows, then turn on “followed only” to create your personal feed.
+                    </div>
+                </div>
+            </div>
+            }
+
+        </div>
+    </div>
+</div>
+
+@code {
+    private UserPrefs _prefs = new();
+    private string? _toast;
+    private bool _hydrated = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        Console.WriteLine("[Settings] OnAfterRenderAsync - Loading preferences...");
+        
+        // JS interop is safe here
+        _prefs = await Prefs.GetAsync();
+        _prefs.DefaultViewMode ??= "Cards";
+        _prefs.FollowedTeamIds ??= new();
+        _prefs.PinnedCompetitionIds ??= new();
+
+        Console.WriteLine($"[Settings] Loaded: FollowedTeamsOnly={_prefs.FollowedTeamsOnly}, PinnedLeaguesFirst={_prefs.PinnedLeaguesFirst}, SmartRefresh={_prefs.SmartRefresh}");
+
+        _hydrated = true;
+        StateHasChanged();
+    }
+
+    private void OnPageClick()
+    {
+        Console.WriteLine("[Settings] Page clicked anywhere");
+    }
+
+    private void Back()
+    {
+        Console.WriteLine("[Settings] Back button clicked");
+        Nav.NavigateTo("/", forceLoad: false);
+    }
+
+    // Guard saves until hydrated (prevents any accidental prerender save)
+    private async Task SafeSave()
+    {
+        if (!_hydrated) return;
+        await Prefs.SaveAsync(_prefs);
+        _toast = $"Saved. (FollowedTeamsOnly={_prefs.FollowedTeamsOnly})";
+        Console.WriteLine($"[Settings] Saved preferences: FollowedTeamsOnly={_prefs.FollowedTeamsOnly}, FollowedTeamIds={_prefs.FollowedTeamIds?.Count ?? 0}");
+    }
+
+    private async Task OnDefaultViewModeChanged(ChangeEventArgs e)
+    {
+        _prefs.DefaultViewMode = e.Value?.ToString() ?? "Cards";
+        await SafeSave();
+    }
+
+    private async Task OnFollowedTeamsOnlyChanged(ChangeEventArgs e)
+    {
+        Console.WriteLine($"[Settings] OnFollowedTeamsOnlyChanged: e.Value={e.Value}, Type={e.Value?.GetType().Name}");
+        _prefs.FollowedTeamsOnly = e.Value switch
+        {
+            bool b => b,
+            string s => bool.TryParse(s, out var result) && result,
+            _ => false
+        };
+        Console.WriteLine($"[Settings] Set FollowedTeamsOnly to: {_prefs.FollowedTeamsOnly}");
+        await SafeSave();
+        StateHasChanged();
+    }
+
+    private async Task OnPinnedLeaguesFirstChanged(ChangeEventArgs e)
+    {
+        _prefs.PinnedLeaguesFirst = e.Value switch
+        {
+            bool b => b,
+            string s => bool.TryParse(s, out var result) && result,
+            _ => false
+        };
+        await SafeSave();
+        StateHasChanged();
+    }
+
+    private async Task OnSmartRefreshChanged(ChangeEventArgs e)
+    {
+        _prefs.SmartRefresh = e.Value switch
+        {
+            bool b => b,
+            string s => bool.TryParse(s, out var result) && result,
+            _ => false
+        };
+        await SafeSave();
+        StateHasChanged();
+    }
+
+    private async Task Save()
+    {
+        Console.WriteLine("[Settings] Save button handler called");
+        await SafeSave();
+    }
+
+    private async Task Reset()
+    {
+        Console.WriteLine("[Settings] Reset button handler called");
+        _prefs = new UserPrefs();
+        await SafeSave();
+        _toast = "Reset to defaults.";
+    }
+}
+
