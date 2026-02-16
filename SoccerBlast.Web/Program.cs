@@ -1,5 +1,6 @@
 using SoccerBlast.Web.Services;
 using SoccerBlast.Web.Components;
+using SoccerBlast.Web.Services.Video;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,6 +15,13 @@ builder.Services.AddHttpClient<SoccerApiClient>(client =>
 });
 
 builder.Services.AddScoped<BrowserTimeZone>();
+builder.Services.AddScoped<UserPrefsStore>();
+var apiBaseUrl = builder.Configuration["Api:BaseUrl"] ?? "http://localhost:5249/";
+
+builder.Services.AddHttpClient<IVideoSource, ApiVideoSource>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+});
 
 var app = builder.Build();
 
