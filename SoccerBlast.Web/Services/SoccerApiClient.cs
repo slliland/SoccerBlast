@@ -85,4 +85,19 @@ public class SoccerApiClient
             $"api/search?q={Uri.EscapeDataString(q)}&limit={limit}"
         ) ?? new();
     }
+
+    public Task<List<MatchDto>> GetRangeAsync(DateOnly from, DateOnly to, int? competitionId = null)
+    {
+        var qs = $"from={from:yyyy-MM-dd}&to={to:yyyy-MM-dd}&{TzQuery()}";
+        if (competitionId.HasValue) qs += $"&competitionId={competitionId.Value}";
+        return _http.GetFromJsonAsync<List<MatchDto>>($"api/Matches/range?{qs}")!;
+    }
+
+    public async Task<int> SyncRangeAsync(DateOnly from, DateOnly to)
+    {
+        var qs = $"from={from:yyyy-MM-dd}&to={to:yyyy-MM-dd}&{TzQuery()}";
+        var res = await _http.PostAsync($"api/Matches/range?{qs}", content: null);
+        res.EnsureSuccessStatusCode();
+        return (await res.Content.ReadFromJsonAsync<int>())!;
+    }
 }
