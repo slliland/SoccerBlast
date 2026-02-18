@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SoccerBlast.Api.Data;
 
@@ -10,9 +11,11 @@ using SoccerBlast.Api.Data;
 namespace SoccerBlast.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260217170934_AddSportsDbMappingTables")]
+    partial class AddSportsDbMappingTables
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.3");
@@ -251,46 +254,16 @@ namespace SoccerBlast.Api.Migrations
                     b.Property<int>("TeamId")
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("BadgeUrl")
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("BannerUrl")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("DescriptionEn")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Facebook")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("FormedYear")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Instagram")
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("JerseyUrl")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Keywords")
-                        .HasColumnType("TEXT");
-
                     b.Property<DateTime?>("LastUpdatedUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Leagues")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Location")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("LogoUrl")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("PrimaryColor")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("SecondaryColor")
                         .HasColumnType("TEXT");
 
                     b.Property<int?>("StadiumCapacity")
@@ -300,18 +273,6 @@ namespace SoccerBlast.Api.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("StadiumName")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("TertiaryColor")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Twitter")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Website")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Youtube")
                         .HasColumnType("TEXT");
 
                     b.HasKey("TeamId");

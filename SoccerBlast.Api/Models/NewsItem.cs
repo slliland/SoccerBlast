@@ -11,5 +11,6 @@ public class NewsItem
     public DateTime? PublishedAtUtc { get; set; }
 
     public string? ThumbnailUrl { get; set; }
+    public string? Content { get; set; }
     public string UrlHash { get; set; } = "";
 }
