@@ -9,4 +9,14 @@ public sealed class UserPrefs
 
     public List<int> FollowedTeamIds { get; set; } = new();
     public List<int> PinnedCompetitionIds { get; set; } = new();
+    
+    // Store team info for UI display (crests, names)
+    public Dictionary<int, TeamInfo> FollowedTeamsInfo { get; set; } = new();
+}
+
+public sealed class TeamInfo
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public string? CrestUrl { get; set; }
 }

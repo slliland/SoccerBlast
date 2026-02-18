@@ -7,4 +7,5 @@ public class NewsDto
     public string Source { get; set; } = "";
     public DateTimeOffset? PublishedAt { get; set; }
     public string? ThumbnailUrl { get; set; }
+    public string? Content { get; set; }
 }
