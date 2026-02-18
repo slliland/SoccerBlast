@@ -1,3 +1,5 @@
+using SoccerBlast.Shared.Contracts;
+
 namespace SoccerBlast.Web.Services;
 
 /// <summary>
@@ -18,20 +20,34 @@ public static class TeamLikeHelper
         => IsLiked(teamId, followedTeamIds) ? "images/like/like.png" : "images/like/unlike.png";
 
     /// <summary>
-    /// Toggle like status for a team and save preferences.
+    /// Toggle like status for a team and save preferences with team info.
     /// </summary>
     public static async Task ToggleLikeAsync(
         int teamId,
+        string teamName,
+        string? teamCrestUrl,
         ICollection<int> followedTeamIds,
         UserPrefsStore prefsStore,
         Func<Task> onStateChanged)
     {
-        if (followedTeamIds.Contains(teamId))
-            followedTeamIds.Remove(teamId);
-        else
-            followedTeamIds.Add(teamId);
-
         var prefs = await prefsStore.GetAsync();
+        
+        if (followedTeamIds.Contains(teamId))
+        {
+            followedTeamIds.Remove(teamId);
+            prefs.FollowedTeamsInfo.Remove(teamId);
+        }
+        else
+        {
+            followedTeamIds.Add(teamId);
+            prefs.FollowedTeamsInfo[teamId] = new TeamInfo 
+            { 
+                Id = teamId, 
+                Name = teamName, 
+                CrestUrl = teamCrestUrl 
+            };
+        }
+
         prefs.FollowedTeamIds = followedTeamIds.ToList();
         await prefsStore.SaveAsync(prefs);
         

@@ -76,6 +76,22 @@ public class SoccerApiClient
             ?? new();
     }
 
+    public Task<List<NewsDto>> GetRecommendedNewsAsync(IEnumerable<int> teamIds, int limit = 20)
+    {
+        var ids = teamIds?.ToList() ?? new List<int>();
+        if (ids.Count == 0) return GetRecentNewsAsync(limit);
+
+        // teamIds=1&teamIds=2&...
+        var qs = string.Join("&", ids.Select(x => $"teamIds={x}"));
+        return _http.GetFromJsonAsync<List<NewsDto>>($"api/news/recommended?{qs}&limit={limit}")
+            ?? Task.FromResult(new List<NewsDto>());
+    }
+
+    public async Task RefreshNewsAsync()
+    {
+        await _http.PostAsync("api/news/refresh", null);
+    }
+
     public async Task<List<SearchResultDto>> SearchAsync(string q, int limit = 12)
     {
         q = (q ?? "").Trim();
@@ -99,5 +115,26 @@ public class SoccerApiClient
         var res = await _http.PostAsync($"api/Matches/range?{qs}", content: null);
         res.EnsureSuccessStatusCode();
         return (await res.Content.ReadFromJsonAsync<int>())!;
+    }
+
+    public async Task<TeamDetailDto?> GetTeamAsync(int id, CancellationToken ct = default)
+    {
+        return await _http.GetFromJsonAsync<TeamDetailDto>($"api/teams/{id}", ct);
+    }
+
+    public async Task<List<TeamPlayerDto>> GetTeamPlayersAsync(int id)
+    {
+        return await _http.GetFromJsonAsync<List<TeamPlayerDto>>($"api/teams/{id}/players") ?? new List<TeamPlayerDto>();
+    }
+
+    /// <summary>Returns (success, message). On 404 or failure, success is false.</summary>
+    public async Task<(bool ok, string message)> SyncTeamProfileAsync(int id)
+    {
+        using var resp = await _http.PostAsync($"api/teams/{id}/sync-profile", null);
+        var body = await resp.Content.ReadAsStringAsync();
+        var msg = string.IsNullOrWhiteSpace(body) ? (resp.ReasonPhrase ?? "Sync failed") : body;
+        if (!resp.IsSuccessStatusCode)
+            return (false, msg);
+        return (true, string.IsNullOrWhiteSpace(body) ? "Synced." : msg);
     }
 }

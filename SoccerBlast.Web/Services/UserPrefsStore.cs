@@ -34,6 +34,7 @@ public sealed class UserPrefsStore
 
             prefs.FollowedTeamIds ??= new();
             prefs.PinnedCompetitionIds ??= new();
+            prefs.FollowedTeamsInfo ??= new();
             prefs.FollowedTeamIds = prefs.FollowedTeamIds.Distinct().ToList();
             prefs.PinnedCompetitionIds = prefs.PinnedCompetitionIds.Distinct().ToList();
 
@@ -56,6 +57,7 @@ public sealed class UserPrefsStore
     {
         prefs.FollowedTeamIds ??= new();
         prefs.PinnedCompetitionIds ??= new();
+        prefs.FollowedTeamsInfo ??= new();
 
         prefs.DefaultViewMode =
             prefs.DefaultViewMode?.Equals("cards", StringComparison.OrdinalIgnoreCase) == true ? "Cards" :
