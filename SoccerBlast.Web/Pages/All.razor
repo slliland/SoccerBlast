@@ -164,11 +164,11 @@
 
       @if (!_hydrated)
       {
-        <p class="small-muted">Loading…</p>
+        <GlobalSpinner Message="Loading…" />
       }
       else if (_loading)
       {
-        <p class="small-muted">Loading matches…</p>
+        <GlobalSpinner Message="Loading matches…" />
       }
       else if (_items.Count == 0)
       {
@@ -202,12 +202,14 @@
                           decoding="async"
                           referrerpolicy="no-referrer"
                           onload="this.classList.add('loaded');"
-                          onerror="this.onerror=null; this.src='images/teams/placeholder.png'; this.classList.add('loaded');" />
+                          onerror="this.onerror=null; this.src='images/teams/placeholder.png'; this.classList.add('loaded');"
+                          @onclick='() => Nav.NavigateTo($"/team/{m.HomeTeamId}")'
+                          style="cursor: pointer;" />
                       <div class="am-name-row">
-                        <div class="am-name" title="@m.HomeTeamName">@m.HomeTeamName</div>
+                        <div class="am-name" title="@m.HomeTeamName" @onclick='() => Nav.NavigateTo($"/team/{m.HomeTeamId}")' style="cursor: pointer;">@m.HomeTeamName</div>
                         <button class="sb-likebtn @(IsLikedTeam(m.HomeTeamId) ? "liked" : "")"
                                 title="Like team"
-                                @onclick="() => ToggleLikeTeam(m.HomeTeamId)"
+                                @onclick="() => ToggleLikeTeam(m.HomeTeamId, m.HomeTeamName, m.HomeTeamCrestUrl)"
                                 @onclick:stopPropagation="true">
                           <img class="sb-likeimg"
                               src="@TeamLikeIcon(m.HomeTeamId)"
@@ -224,12 +226,14 @@
                           decoding="async"
                           referrerpolicy="no-referrer"
                           onload="this.classList.add('loaded');"
-                          onerror="this.onerror=null; this.src='images/teams/placeholder.png'; this.classList.add('loaded');" />
+                          onerror="this.onerror=null; this.src='images/teams/placeholder.png'; this.classList.add('loaded');"
+                          @onclick='() => Nav.NavigateTo($"/team/{m.AwayTeamId}")'
+                          style="cursor: pointer;" />
                       <div class="am-name-row">
-                        <div class="am-name" title="@m.AwayTeamName">@m.AwayTeamName</div>
+                        <div class="am-name" title="@m.AwayTeamName" @onclick='() => Nav.NavigateTo($"/team/{m.AwayTeamId}")' style="cursor: pointer;">@m.AwayTeamName</div>
                         <button class="sb-likebtn @(IsLikedTeam(m.AwayTeamId) ? "liked" : "")"
                                 title="Like team"
-                                @onclick="() => ToggleLikeTeam(m.AwayTeamId)"
+                                @onclick="() => ToggleLikeTeam(m.AwayTeamId, m.AwayTeamName, m.AwayTeamCrestUrl)"
                                 @onclick:stopPropagation="true">
                           <img class="sb-likeimg"
                               src="@TeamLikeIcon(m.AwayTeamId)"
@@ -654,9 +658,9 @@
   private string TeamLikeIcon(int teamId)
     => TeamLikeHelper.GetLikeIconPath(teamId, _prefs.FollowedTeamIds);
 
-  private async Task ToggleLikeTeam(int teamId)
+  private async Task ToggleLikeTeam(int teamId, string teamName, string? teamCrestUrl)
   {
-    await TeamLikeHelper.ToggleLikeAsync(teamId, _prefs.FollowedTeamIds, Prefs, async () =>
+    await TeamLikeHelper.ToggleLikeAsync(teamId, teamName, teamCrestUrl, _prefs.FollowedTeamIds, Prefs, async () =>
     {
       await InvokeAsync(StateHasChanged);
     });

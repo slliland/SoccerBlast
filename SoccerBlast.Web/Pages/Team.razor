@@ -1,0 +1,455 @@
+@page "/team/{Id:int}"
+@using Microsoft.AspNetCore.Components.Web
+@rendermode RenderMode.InteractiveServer
+@using SoccerBlast.Shared.Contracts
+@using SoccerBlast.Web.Services
+@inject SoccerBlast.Web.Services.SoccerApiClient Api
+@inject NavigationManager Nav
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+
+<div class="team-page">
+  @if (_loading)
+  {
+    <div class="team-loading">
+      <GlobalSpinner Message="Loading team..." FullPage="true" />
+    </div>
+  }
+  else if (_team is null)
+  {
+    <div class="team-error">
+      <p>Team not found.</p>
+      <button class="team-back-btn" @onclick="GoBack">← Back</button>
+    </div>
+  }
+  else
+  {
+    <!-- Hero Section with Banner -->
+    <div class="team-hero" style="background-image: url('@(_team.Profile?.BannerUrl ?? "images/news/placeholder.png")')">
+      <div class="team-hero-overlay"></div>
+      <div class="team-hero-content">
+        <button class="team-back-btn" @onclick="GoBack">Back</button>
+        
+        <div class="team-hero-info">
+          <img class="team-hero-crest"
+               src="@(string.IsNullOrWhiteSpace(_team.CrestUrl) ? "images/teams/placeholder.png" : _team.CrestUrl)"
+               alt="@_team.Name"
+               loading="lazy"
+               referrerpolicy="no-referrer"
+               onerror="this.onerror=null; this.src='images/teams/placeholder.png';" />
+          
+          <h1 class="team-hero-name">@_team.Name</h1>
+          
+          @{
+            var firstLeague = !string.IsNullOrWhiteSpace(_team.Profile?.Leagues) 
+              ? _team.Profile.Leagues.Split(',', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim() 
+              : null;
+          }
+          @if (!string.IsNullOrEmpty(firstLeague))
+          {
+            <p class="team-hero-leagues">@firstLeague</p>
+          }
+        </div>
+      </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_toast))
+    {
+      <div class="team-toast">@_toast</div>
+    }
+
+    <!-- Tabs and Content Layout -->
+    <div class="team-layout">
+      <!-- Tabs Navigation -->
+      <div class="team-tabs">
+        <button class="team-tab @(_activeTab == "overview" ? "active" : "")" @onclick='() => _activeTab = "overview"'>
+          <img src="/images/teams/overview.png" alt="Overview" class="team-tab-icon" />
+          <span>Overview</span>
+        </button>
+        <button class="team-tab @(_activeTab == "stadium" ? "active" : "")" @onclick='() => _activeTab = "stadium"'>
+          <img src="/images/teams/stadium-cenit-view-.png" alt="Stadium" class="team-tab-icon" />
+          <span>Stadium</span>
+        </button>
+        <button class="team-tab @(_activeTab == "about" ? "active" : "")" @onclick='() => _activeTab = "about"'>
+          <img src="/images/teams/about.png" alt="About" class="team-tab-icon" />
+          <span>About</span>
+        </button>
+        <button class="team-tab @(_activeTab == "kit" ? "active" : "")" @onclick='() => _activeTab = "kit"'>
+          <img src="/images/teams/media.png" alt="Club Hub" class="team-tab-icon" />
+          <span>Club Hub</span>
+        </button>
+        <button class="team-tab @(_activeTab == "players" ? "active" : "")" @onclick="@(() => LoadPlayersTab())">
+          <img src="/images/teams/soccer-player.png" alt="Players" class="team-tab-icon" />
+          <span>Players</span>
+        </button>
+      </div>
+
+      <!-- Content Section -->
+      <div class="team-content">
+      @if (_team.Profile != null)
+      {
+        @if (_activeTab == "overview")
+        {
+          <!-- Team Overview -->
+          <div class="team-tab-content">
+            <div class="team-info-row">
+              @if (_team.Profile.FormedYear.HasValue)
+              {
+                <div class="team-info-item">
+                  <span class="team-info-label">Founded</span>
+                  <span class="team-info-value">@_team.Profile.FormedYear.Value</span>
+                </div>
+              }
+              
+              @if (!string.IsNullOrWhiteSpace(_team.Profile.Location))
+              {
+                <div class="team-info-item">
+                  <span class="team-info-label">Location</span>
+                  <span class="team-info-value">@_team.Profile.Location</span>
+                </div>
+              }
+              
+              @if (!string.IsNullOrWhiteSpace(_team.Profile.Keywords))
+              {
+                <div class="team-info-item">
+                  <span class="team-info-label">Nicknames</span>
+                  <span class="team-info-value">@_team.Profile.Keywords</span>
+                </div>
+              }
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_team.Profile.Leagues))
+            {
+              <div class="team-section-block">
+                <h3 class="team-block-title">Competitions</h3>
+                <div class="team-leagues-grid">
+                  @foreach (var league in _team.Profile.Leagues.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                  {
+                    var leagueName = league.Trim();
+                    var iconPath = LeagueIconMap.GetByName(leagueName);
+                    <div class="team-league-item">
+                      @if (!string.IsNullOrEmpty(iconPath))
+                      {
+                        <img src="@iconPath" alt="@leagueName" class="team-league-icon" />
+                      }
+                      <span class="team-league-name">@leagueName</span>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        }
+        else if (_activeTab == "stadium")
+        {
+          <!-- Stadium Info -->
+          <div class="team-tab-content">
+            @if (!string.IsNullOrWhiteSpace(_team.Profile.StadiumName))
+            {
+              <div class="team-stadium-card">
+                <div class="team-stadium-header">
+                  <img src="/images/teams/arena.png" alt="Stadium" class="team-stadium-icon" />
+                  <h3 class="team-stadium-name">@_team.Profile.StadiumName</h3>
+                </div>
+                
+                <div class="team-stadium-details">
+                  @if (_team.Profile.StadiumCapacity.HasValue)
+                  {
+                    <div class="team-stadium-detail">
+                      <span class="team-detail-label">Capacity</span>
+                      <span class="team-detail-value">@_team.Profile.StadiumCapacity.Value.ToString("N0")</span>
+                    </div>
+                  }
+                  
+                  @if (!string.IsNullOrWhiteSpace(_team.Profile.StadiumLocation))
+                  {
+                    <div class="team-stadium-detail">
+                      <span class="team-detail-label">Location</span>
+                      <span class="team-detail-value">@_team.Profile.StadiumLocation</span>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        }
+        else if (_activeTab == "about")
+        {
+          <!-- About Section -->
+          <div class="team-tab-content">
+            @if (!string.IsNullOrWhiteSpace(_team.Profile.DescriptionEn))
+            {
+              <div class="team-about-text">
+                @_team.Profile.DescriptionEn
+              </div>
+            }
+          </div>
+        }
+        else if (_activeTab == "kit")
+        {
+          <!-- Team Kit & Social -->
+          <div class="team-tab-content">
+            @if (!string.IsNullOrWhiteSpace(_team.Profile.JerseyUrl))
+            {
+              <div class="team-section-block">
+                <h3 class="team-block-title">Team Kit</h3>
+                <div class="team-kit-display">
+                  <img src="@_team.Profile.JerseyUrl"
+                       alt="@_team.Name kit"
+                       class="team-kit-image"
+                       loading="lazy"
+                       referrerpolicy="no-referrer"
+                       onerror="this.style.display='none';" />
+                </div>
+              </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(_team.Profile.Website) ||
+                 !string.IsNullOrWhiteSpace(_team.Profile.Facebook) ||
+                 !string.IsNullOrWhiteSpace(_team.Profile.Twitter) ||
+                 !string.IsNullOrWhiteSpace(_team.Profile.Instagram) ||
+                 !string.IsNullOrWhiteSpace(_team.Profile.Youtube))
+            {
+              <div class="team-section-block">
+                <h3 class="team-block-title">Social Media</h3>
+                <div class="team-social-links">
+                  @if (!string.IsNullOrWhiteSpace(_team.Profile.Website))
+                  {
+                    <a href="@_team.Profile.Website" target="_blank" rel="noopener noreferrer" class="team-social-link">Website</a>
+                  }
+                  @if (!string.IsNullOrWhiteSpace(_team.Profile.Twitter))
+                  {
+                    <a href="@_team.Profile.Twitter" target="_blank" rel="noopener noreferrer" class="team-social-link">Twitter</a>
+                  }
+                  @if (!string.IsNullOrWhiteSpace(_team.Profile.Facebook))
+                  {
+                    <a href="@_team.Profile.Facebook" target="_blank" rel="noopener noreferrer" class="team-social-link">Facebook</a>
+                  }
+                  @if (!string.IsNullOrWhiteSpace(_team.Profile.Instagram))
+                  {
+                    <a href="@_team.Profile.Instagram" target="_blank" rel="noopener noreferrer" class="team-social-link">Instagram</a>
+                  }
+                  @if (!string.IsNullOrWhiteSpace(_team.Profile.Youtube))
+                  {
+                    <a href="@_team.Profile.Youtube" target="_blank" rel="noopener noreferrer" class="team-social-link">YouTube</a>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        }
+        else if (_activeTab == "players")
+        {
+          <!-- Players Roster -->
+          <div class="team-tab-content">
+            @if (_loadingPlayers)
+            {
+              <div class="team-players-loading">
+                <GlobalSpinner Message="Loading players..." />
+              </div>
+            }
+            else if (_players != null && _players.Count > 0)
+            {
+              <div class="team-players-grid">
+                @foreach (var player in _players)
+                {
+                  <div class="team-player-card">
+                    <img src="@(player.ThumbUrl ?? "/images/teams/placeholder.png")" 
+                         alt="@player.Name" 
+                         class="team-player-photo"
+                         loading="lazy"
+                         referrerpolicy="no-referrer"
+                         onerror="this.src='/images/teams/placeholder.png';" />
+                    <div class="team-player-info">
+                      <h4 class="team-player-name">@player.Name</h4>
+                      <div class="team-player-details">
+                        <span class="team-player-position">@player.Position</span>
+                        @if (!string.IsNullOrEmpty(player.Nationality))
+                        {
+                          <span class="team-player-nationality">@player.Nationality</span>
+                        }
+                      </div>
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+            else
+            {
+              <div class="team-empty">
+                <h3>No players found</h3>
+                <p class="small-muted">Player roster not available</p>
+              </div>
+            }
+          </div>
+        }
+      }
+      else
+      {
+        <div class="team-tab-content">
+          <div class="team-empty">
+            @if (_profileUnavailable)
+            {
+              <h3>Profile not available</h3>
+              <p class="small-muted">No extended profile for this team in the current source.</p>
+            }
+            else
+            {
+              <div class="team-empty-icon">⏳</div>
+              <h3>Loading team profile...</h3>
+              <p class="small-muted">Fetching stadium, description, and media</p>
+            }
+          </div>
+        </div>
+      }
+      </div>
+    </div>
+  }
+</div>
+
+@code {
+  [Parameter] public int Id { get; set; }
+
+  private bool _loading = true;
+  private bool _syncing;
+  private string? _toast;
+  private string _activeTab = "overview";
+
+  private TeamDetailDto? _team;
+  private AutoSyncLoop? _syncLoop;
+  private bool _profileUnavailable;
+
+  private bool _loadingPlayers = false;
+  private List<TeamPlayerDto>? _players;
+
+  private async Task GoBack()
+  {
+    await JSRuntime.InvokeVoidAsync("soccerBlastBack");
+  }
+
+  protected override async Task OnParametersSetAsync()
+  {
+    // Stop existing loop if team ID changed
+    _syncLoop?.Stop();
+    _syncLoop?.Dispose();
+    _syncLoop = null;
+
+    _loading = true;
+    _toast = null;
+    _team = null;
+    _profileUnavailable = false;
+    StateHasChanged();
+
+    try
+    {
+      using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+      _team = await Api.GetTeamAsync(Id, cts.Token);
+      
+      if (_team != null)
+      {
+        StartAutoSync();
+        // Sync immediately if profile missing (don't wait for first 60s tick)
+        if (_team.Profile == null || string.IsNullOrWhiteSpace(_team.SportsDbTeamId))
+          _ = InvokeAsync(SyncProfileInBackground);
+      }
+    }
+    catch (OperationCanceledException)
+    {
+      _toast = "Request timed out. The API may be slow or unavailable.";
+    }
+    catch (HttpRequestException)
+    {
+      _toast = "Could not reach the API. Make sure SoccerBlast.Api is running (e.g. dotnet run --project SoccerBlast.Api).";
+    }
+    catch (Exception ex)
+    {
+      var msg = ex.Message;
+      if (msg.Length > 80) msg = msg.Substring(0, 77) + "...";
+      _toast = $"Load failed: {msg}";
+    }
+    finally
+    {
+      _loading = false;
+      await InvokeAsync(StateHasChanged);
+    }
+  }
+
+  private void StartAutoSync()
+  {
+    if (_profileUnavailable) return;
+    _syncLoop = new AutoSyncLoop(TimeSpan.FromSeconds(60), async _ =>
+    {
+      if (!_profileUnavailable && (_team?.Profile == null || string.IsNullOrWhiteSpace(_team.SportsDbTeamId)))
+        await SyncProfileInBackground();
+    });
+    _syncLoop.Start();
+  }
+
+  private DateTime _lastSyncAttemptUtc = DateTime.MinValue;
+
+  private async Task SyncProfileInBackground()
+  {
+    if (_syncing || _profileUnavailable) return;
+    if (DateTime.UtcNow - _lastSyncAttemptUtc < TimeSpan.FromMinutes(5)) return;
+    _lastSyncAttemptUtc = DateTime.UtcNow;
+    _syncing = true;
+
+    try
+    {
+      var (ok, message) = await Api.SyncTeamProfileAsync(Id);
+
+      if (!ok && (message.Contains("No SportsDB match", StringComparison.OrdinalIgnoreCase) || message.Contains("not found", StringComparison.OrdinalIgnoreCase)))
+      {
+        _profileUnavailable = true;
+        _syncLoop?.Stop();
+      }
+
+      // Reload team (profile may now be populated, or still null)
+      _team = await Api.GetTeamAsync(Id);
+
+      if (!ok && !_profileUnavailable)
+        _toast = message.Length > 60 ? message.Substring(0, 57) + "..." : message;
+
+      await InvokeAsync(StateHasChanged);
+    }
+    catch (Exception ex)
+    {
+      _toast = $"Auto-sync: {ex.Message}";
+      await InvokeAsync(StateHasChanged);
+    }
+    finally
+    {
+      _syncing = false;
+      await InvokeAsync(StateHasChanged);
+    }
+  }
+
+  private async Task LoadPlayersTab()
+  {
+    _activeTab = "players";
+    
+    if (_players != null || _loadingPlayers || string.IsNullOrEmpty(_team?.SportsDbTeamId))
+      return;
+
+    _loadingPlayers = true;
+    try
+    {
+      _players = await Api.GetTeamPlayersAsync(Id);
+    }
+    catch (Exception ex)
+    {
+      _toast = $"Failed to load players: {ex.Message}";
+    }
+    finally
+    {
+      _loadingPlayers = false;
+      await InvokeAsync(StateHasChanged);
+    }
+  }
+
+  public void Dispose()
+  {
+    _syncLoop?.Dispose();
+  }
+
+}

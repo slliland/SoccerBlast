@@ -5,13 +5,14 @@
 @using Microsoft.AspNetCore.Components.Routing
 @using Microsoft.AspNetCore.Components.Web
 @inject NavigationManager Nav
+@inject IJSRuntime JSRuntime
 @rendermode RenderMode.InteractiveServer
 
 <div class="sb-page sb-settings-page" @onclick="OnPageClick">
     <div class="sb-shell">
 
         <div class="sb-settings-head">
-            <button class="sb-back" @onclick="Back" @onclick:preventDefault="false" title="Back">Back</button>
+            <button class="sb-back" @onclick="GoBack" @onclick:preventDefault="false" title="Back">Back</button>
 
             <div class="sb-settings-titlewrap">
                 <h2 class="sb-settings-title">Profile & Settings</h2>
@@ -28,7 +29,7 @@
             @if (!_hydrated)
             {
                 <div class="sb-card sb-settings-card">
-                    <p class="small-muted">Loading settings...</p>
+                    <GlobalSpinner Message="Loading settings..." />
                 </div>
             }
             else
@@ -175,10 +176,9 @@
         Console.WriteLine("[Settings] Page clicked anywhere");
     }
 
-    private void Back()
+    private async Task GoBack()
     {
-        Console.WriteLine("[Settings] Back button clicked");
-        Nav.NavigateTo("/", forceLoad: false);
+        await JSRuntime.InvokeVoidAsync("soccerBlastBack");
     }
 
     // Guard saves until hydrated (prevents any accidental prerender save)

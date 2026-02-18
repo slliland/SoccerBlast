@@ -1,0 +1,548 @@
+@page "/news"
+@using SoccerBlast.Shared.Contracts
+@using SoccerBlast.Web.Services
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Web
+@inject SoccerBlast.Web.Services.SoccerApiClient Api
+@inject SoccerBlast.Web.Services.UserPrefsStore Prefs
+@inject NavigationManager Nav
+@rendermode RenderMode.InteractiveServer
+@implements IDisposable
+
+<div class="sb-page" @onclick="CloseOverlays">
+  <div class="sb-shell">
+
+    <div class="sb-card sb-topbar">
+      <div class="sb-brand">
+        <img class="sb-logo" src="images/logo/soccer-blast.png" alt="Soccer Blast" />
+        <div>Soccer Blast</div>
+      </div>
+
+      <div class="sb-tabs">
+        <NavLink href="/" Match="NavLinkMatch.All">Live Scores</NavLink>
+        <NavLink href="/all">All Match</NavLink>
+        <NavLink href="/video">Video</NavLink>
+        <NavLink href="/news">News</NavLink>
+        <NavLink href="/stats">Stats</NavLink>
+        <NavLink href="/rankings">Rankings</NavLink>
+      </div>
+
+      <div class="sb-search">
+        <input class="sb-search-input"
+               placeholder="Search news…"
+               value="@_q"
+               @oninput="OnQ" />
+      </div>
+
+      <NavLink class="sb-avatar" title="Profile" href="/settings"></NavLink>
+    </div>
+
+    <div class="sb-card sb-news @(_syncing ? "syncing" : "")">
+
+      <!-- Controls -->
+      <div class="sb-news-controls">
+        <div class="sb-filter-custom" @onclick:stopPropagation="true">
+          <button class="sb-filter-btn" @onclick="() => _showSourceMenu = !_showSourceMenu">
+            <span class="sb-filter-text">@(string.IsNullOrEmpty(_source) ? "All sources" : _source)</span>
+            <span class="sb-filter-arrow">▾</span>
+          </button>
+          @if (_showSourceMenu)
+          {
+            <div class="sb-filter-menu">
+              <button class="sb-filter-option @(string.IsNullOrEmpty(_source) ? "active" : "")"
+                      @onclick='() => SelectSource("")'>
+                All sources
+              </button>
+              @foreach (var s in _sources)
+              {
+                <button class="sb-filter-option @(_source == s ? "active" : "")"
+                        @onclick="() => SelectSource(s)">
+                  @s
+                </button>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="sb-news-sync-status">
+          @if (_syncing)
+          {
+            <span class="sb-news-syncing">
+              <span class="sb-sync-spinner"></span>
+              Syncing...
+            </span>
+          }
+          else
+          {
+            <span class="small-muted">
+              Updated @_updatedAt.ToString("HH:mm")
+            </span>
+          }
+        </div>
+      </div>
+
+      @if (_loading)
+      {
+        <GlobalSpinner Message="Loading news…" />
+      }
+      else if (_latestFiltered.Count == 0)
+      {
+        <p class="small-muted" style="margin:20px 0;">No news found.</p>
+      }
+      else
+      {
+        <!-- For You Section (Personalized) -->
+        <div class="sb-news-section">
+          <div class="sb-news-section-head">
+            <div class="sb-news-section-title-group">
+              <h3>For You</h3>
+              @if (_prefs.FollowedTeamIds.Count > 0)
+              {
+              @if (_followedTeams.Count > 0)
+              {
+                <div class="sb-followed-teams">
+                  @foreach (var team in _followedTeams)
+                  {
+                    <div class="sb-followed-team" title="@team.Name" @onclick='() => Nav.NavigateTo($"/team/{team.Id}")' style="cursor: pointer;">
+                      <img src="@(string.IsNullOrWhiteSpace(team.CrestUrl) ? "images/teams/placeholder.png" : team.CrestUrl)"
+                           alt="@team.Name"
+                           loading="lazy"
+                           referrerpolicy="no-referrer"
+                           onerror="this.onerror=null; this.src='images/teams/placeholder.png';" />
+                      <span>@team.Name</span>
+                    </div>
+                  }
+                </div>
+              }
+              }
+              else
+              {
+                <span class="small-muted">Like teams to get personalized news</span>
+              }
+            </div>
+          </div>
+
+          @if (_prefs.FollowedTeamIds.Count == 0)
+          {
+            <div class="sb-news-empty">
+              <p>Follow your favorite teams to see personalized news here.</p>
+              <p class="small-muted">Click the ♡ icon next to team names in matches to follow them.</p>
+            </div>
+          }
+          else if (_recommended.Count == 0 && _fallbackRecommended.Count > 0)
+          {
+            <!-- Fallback: Filter latest news by team names -->
+            <div class="sb-news-grid">
+              @foreach (var n in _fallbackRecommended.Take(8))
+              {
+                <a class="sb-news-grid-card" href="@n.Url" target="_blank" rel="noopener noreferrer">
+                  <div class="sb-news-grid-img">
+                    <img src="@(string.IsNullOrWhiteSpace(n.ThumbnailUrl) ? "images/news/placeholder.png" : n.ThumbnailUrl)"
+                         alt="@n.Title"
+                         loading="lazy"
+                         referrerpolicy="no-referrer"
+                         onerror="this.src='images/news/placeholder.png';" />
+                  </div>
+                  <div class="sb-news-grid-content">
+                    <div class="sb-news-grid-meta">
+                      <span class="sb-news-grid-source">@n.Source</span>
+                      <span class="sb-news-grid-time">• @MatchDisplayHelper.FormatRelativeTime(n.PublishedAt)</span>
+                    </div>
+                    <h4 class="sb-news-grid-title">@n.Title</h4>
+                  </div>
+                </a>
+              }
+            </div>
+          }
+          else if (_recommended.Count == 0)
+          {
+            <div class="sb-news-empty">
+              <p>No news found for your followed teams yet.</p>
+              <p class="small-muted">News auto-syncs every 30 seconds. New articles will appear here automatically!</p>
+            </div>
+          }
+          else
+          {
+            <!-- Grid of recommended news -->
+            <div class="sb-news-grid">
+              @foreach (var n in _recommended.Take(8))
+              {
+                <a class="sb-news-grid-card" href="@n.Url" target="_blank" rel="noopener noreferrer">
+                  <div class="sb-news-grid-img">
+                    <img src="@(string.IsNullOrWhiteSpace(n.ThumbnailUrl) ? "images/news/placeholder.png" : n.ThumbnailUrl)"
+                         alt="@n.Title"
+                         loading="lazy"
+                         referrerpolicy="no-referrer"
+                         onerror="this.src='images/news/placeholder.png';" />
+                  </div>
+                  <div class="sb-news-grid-content">
+                    <div class="sb-news-grid-meta">
+                      <span class="sb-news-grid-source">@n.Source</span>
+                      <span class="sb-news-grid-time">• @MatchDisplayHelper.FormatRelativeTime(n.PublishedAt)</span>
+                    </div>
+                    <h4 class="sb-news-grid-title">@n.Title</h4>
+                  </div>
+                </a>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- Latest News Section -->
+        <div class="sb-news-section">
+          <div class="sb-news-section-head">
+            <h3>Latest News</h3>
+          </div>
+
+          <!-- Grid of latest news -->
+          <div class="sb-news-grid">
+            @foreach (var n in _latestPaged.Take(12))
+            {
+              <a class="sb-news-grid-card" href="@n.Url" target="_blank" rel="noopener noreferrer">
+                <div class="sb-news-grid-img">
+                  <img src="@(string.IsNullOrWhiteSpace(n.ThumbnailUrl) ? "images/news/placeholder.png" : n.ThumbnailUrl)"
+                       alt="@n.Title"
+                       loading="lazy"
+                       referrerpolicy="no-referrer"
+                       onerror="this.src='images/news/placeholder.png';" />
+                </div>
+                <div class="sb-news-grid-content">
+                  <div class="sb-news-grid-meta">
+                    <span class="sb-news-grid-source">@n.Source</span>
+                    <span class="sb-news-grid-time">• @MatchDisplayHelper.FormatRelativeTime(n.PublishedAt)</span>
+                  </div>
+                  <h4 class="sb-news-grid-title">@n.Title</h4>
+                </div>
+              </a>
+            }
+          </div>
+        </div>
+
+        @if (_latestPaged.Count < _latestFiltered.Count)
+        {
+          <div class="sb-news-more">
+            <button class="btn" @onclick="LoadMore">
+              Load more (@(_latestFiltered.Count - _latestPaged.Count) remaining)
+            </button>
+          </div>
+        }
+      }
+    </div>
+  </div>
+</div>
+
+@code {
+  private bool _loading;
+  private bool _syncing;
+
+  private UserPrefs _prefs = new();
+  private List<string> _followedTeamNames = new();
+  private List<(int Id, string Name, string? CrestUrl)> _followedTeams = new();
+
+  private List<NewsDto> _latest = new();
+  private List<NewsDto> _recommended = new();
+  private List<NewsDto> _fallbackRecommended = new();
+
+  private string _q = "";
+  private string _source = "";
+  private List<string> _sources = new();
+
+  private DateTime _updatedAt = DateTime.Now;
+
+  private int _pageSize = 24;
+  private int _page = 1;
+  private List<NewsDto> _latestFiltered = new();
+  private List<NewsDto> _latestPaged = new();
+
+  private AutoSyncLoop? _newsLoop;
+
+  // Custom dropdown state
+  private bool _showSourceMenu;
+
+  private void CloseOverlays()
+  {
+    _showSourceMenu = false;
+  }
+
+  private void SelectSource(string source)
+  {
+    _source = source;
+    _showSourceMenu = false;
+    ApplyFiltersAndPaging();
+  }
+
+  protected override async Task OnInitializedAsync()
+  {
+    _prefs = await Prefs.GetAsync();
+    await LoadTeamNamesAsync();
+    await InitialLoad();
+
+    // Auto-sync every 30 seconds (news updates frequently)
+    _newsLoop = new AutoSyncLoop(TimeSpan.FromSeconds(30), async _ =>
+    {
+      await BackgroundSync();
+    });
+    _newsLoop.Start();
+  }
+
+  private async Task ForceRefresh()
+  {
+    _syncing = true;
+    StateHasChanged();
+
+    try
+    {
+      // Clear cache and force fresh fetch
+      await Api.RefreshNewsAsync();
+      await InitialLoad();
+    }
+    catch
+    {
+      // ignore errors
+    }
+    finally
+    {
+      _syncing = false;
+      StateHasChanged();
+    }
+  }
+
+  private async Task InitialLoad()
+  {
+    _loading = true;
+    StateHasChanged();
+
+    try
+    {
+      // latest
+      _latest = await Api.GetRecentNewsAsync(120);
+
+      // recommended
+      _recommended = await Api.GetRecommendedNewsAsync(_prefs.FollowedTeamIds, 100);
+
+      // fallback: client-side filtering if database returns nothing
+      _fallbackRecommended = GetFallbackRecommended();
+
+      BuildSources();
+      ApplyFiltersAndPaging();
+      _updatedAt = DateTime.Now;
+    }
+    catch
+    {
+      // swallow for now, keep UI alive
+    }
+    finally
+    {
+      _loading = false;
+      StateHasChanged();
+    }
+  }
+
+  private async Task BackgroundSync()
+  {
+    if (_syncing) return; // prevent overlap
+    
+    _syncing = true;
+    await InvokeAsync(StateHasChanged);
+
+    try
+    {
+      // Reload prefs in case teams changed
+      _prefs = await Prefs.GetAsync();
+      await LoadTeamNamesAsync();
+
+      // Fetch new content
+      _latest = await Api.GetRecentNewsAsync(120);
+      _recommended = await Api.GetRecommendedNewsAsync(_prefs.FollowedTeamIds, 100);
+      _fallbackRecommended = GetFallbackRecommended();
+
+      BuildSources();
+      ApplyFiltersAndPaging();
+      _updatedAt = DateTime.Now;
+
+      await InvokeAsync(StateHasChanged);
+    }
+    catch
+    {
+      // silent failure for background sync
+    }
+    finally
+    {
+      _syncing = false;
+      await InvokeAsync(StateHasChanged);
+    }
+  }
+
+  private async Task LoadTeamNamesAsync()
+  {
+    // Use stored team info from preferences (saved when user likes teams)
+    _followedTeams = _prefs.FollowedTeamsInfo.Values
+      .Select(t => (t.Id, t.Name, t.CrestUrl))
+      .ToList();
+
+    _followedTeamNames = _followedTeams
+      .Select(t => t.Name)
+      .ToList();
+
+    // Backfill: If user has followed teams but no info stored, fetch it
+    if (_prefs.FollowedTeamIds.Count > 0 && _followedTeams.Count == 0)
+    {
+      await BackfillTeamInfo();
+    }
+  }
+
+  private async Task BackfillTeamInfo()
+  {
+    try
+    {
+      // Try to find team info from recent matches
+      var teamDict = new Dictionary<int, (string Name, string? CrestUrl)>();
+      
+      for (int offset = -7; offset <= 7; offset++)
+      {
+        if (teamDict.Count >= _prefs.FollowedTeamIds.Count) break;
+        
+        var date = DateOnly.FromDateTime(DateTime.Now).AddDays(offset);
+        var matches = await Api.GetByLocalDateAsync(date);
+        
+        foreach (var m in matches)
+        {
+          if (_prefs.FollowedTeamIds.Contains(m.HomeTeamId) && !teamDict.ContainsKey(m.HomeTeamId))
+          {
+            teamDict[m.HomeTeamId] = (m.HomeTeamName, m.HomeTeamCrestUrl);
+            _prefs.FollowedTeamsInfo[m.HomeTeamId] = new TeamInfo 
+            { 
+              Id = m.HomeTeamId, 
+              Name = m.HomeTeamName, 
+              CrestUrl = m.HomeTeamCrestUrl 
+            };
+          }
+          if (_prefs.FollowedTeamIds.Contains(m.AwayTeamId) && !teamDict.ContainsKey(m.AwayTeamId))
+          {
+            teamDict[m.AwayTeamId] = (m.AwayTeamName, m.AwayTeamCrestUrl);
+            _prefs.FollowedTeamsInfo[m.AwayTeamId] = new TeamInfo 
+            { 
+              Id = m.AwayTeamId, 
+              Name = m.AwayTeamName, 
+              CrestUrl = m.AwayTeamCrestUrl 
+            };
+          }
+        }
+      }
+
+      // Save updated prefs with team info
+      if (_prefs.FollowedTeamsInfo.Count > 0)
+      {
+        await Prefs.SaveAsync(_prefs);
+        
+        _followedTeams = _prefs.FollowedTeamsInfo.Values
+          .Select(t => (t.Id, t.Name, t.CrestUrl))
+          .ToList();
+
+        _followedTeamNames = _followedTeams
+          .Select(t => t.Name)
+          .ToList();
+      }
+    }
+    catch
+    {
+      // silent failure
+    }
+  }
+
+  private List<NewsDto> GetFallbackRecommended()
+  {
+    if (_followedTeamNames.Count == 0) return new();
+
+    var results = new List<NewsDto>();
+    var seen = new HashSet<string>();
+
+    foreach (var news in _latest)
+    {
+      if (seen.Contains(news.Url)) continue;
+
+      var searchText = $"{news.Title} {news.Source}".ToLower();
+      
+      foreach (var teamName in _followedTeamNames)
+      {
+        var team = teamName.ToLower();
+        
+        // Direct match
+        if (searchText.Contains(team))
+        {
+          results.Add(news);
+          seen.Add(news.Url);
+          break;
+        }
+
+        // Try core name without suffixes
+        var coreName = team
+          .Replace(" fc", "")
+          .Replace(" afc", "")
+          .Replace(" united", "")
+          .Replace(" city", "")
+          .Replace(" town", "")
+          .Trim();
+
+        if (coreName.Length >= 4 && searchText.Contains(coreName))
+        {
+          results.Add(news);
+          seen.Add(news.Url);
+          break;
+        }
+      }
+    }
+
+    return results;
+  }
+
+
+  private void BuildSources()
+  {
+    _sources = _latest
+      .Select(x => x.Source)
+      .Where(s => !string.IsNullOrWhiteSpace(s))
+      .Distinct(StringComparer.OrdinalIgnoreCase)
+      .OrderBy(s => s)
+      .ToList();
+  }
+
+  private void ApplyFiltersAndPaging()
+  {
+    IEnumerable<NewsDto> q = _latest;
+
+    if (!string.IsNullOrWhiteSpace(_source))
+      q = q.Where(n => string.Equals(n.Source, _source, StringComparison.OrdinalIgnoreCase));
+
+    var term = (_q ?? "").Trim();
+    if (term.Length >= 2)
+      q = q.Where(n => (n.Title?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false));
+
+    _latestFiltered = q.ToList();
+    _page = 1;
+    BuildPaged();
+  }
+
+  private void BuildPaged()
+  {
+    _latestPaged = _latestFiltered.Take(_page * _pageSize).ToList();
+  }
+
+  private void LoadMore()
+  {
+    _page++;
+    BuildPaged();
+  }
+
+  private Task OnQ(ChangeEventArgs e)
+  {
+    _q = e.Value?.ToString() ?? "";
+    ApplyFiltersAndPaging();
+    return Task.CompletedTask;
+  }
+
+  public void Dispose()
+  {
+    _newsLoop?.Dispose();
+  }
+}

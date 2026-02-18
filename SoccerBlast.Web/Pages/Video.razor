@@ -9,7 +9,7 @@
 
 @inject SoccerBlast.Web.Services.Video.IVideoSource VideoSource
 
-<div class="sb-page">
+<div class="sb-page" @onclick="CloseOverlays">
   <div class="sb-shell">
 
     <div class="sb-card sb-topbar">
@@ -47,38 +47,104 @@
         </div>
 
         <div class="sb-video-controls">
-          <select class="sb-video-select" value="@(_competitionId?.ToString() ?? "")" @onchange="OnLeague">
-            <option value="">All leagues</option>
-            @foreach (var l in _leagues)
+          <div class="sb-filter-custom" @onclick:stopPropagation="true">
+            <button class="sb-filter-btn" @onclick="() => _showLeagueMenu = !_showLeagueMenu">
+              <span class="sb-filter-text">@_leagueName</span>
+              <span class="sb-filter-arrow">▾</span>
+            </button>
+            @if (_showLeagueMenu)
             {
-                <option value="@l.Id">@l.Name</option>
+              <div class="sb-filter-menu">
+                <button class="sb-filter-option @(_competitionId == null ? "active" : "")"
+                        @onclick='() => SelectLeague(null, "All leagues")'>
+                  All leagues (@_all.Count)
+                </button>
+                @foreach (var l in _leagues)
+                {
+                  <button class="sb-filter-option @(_competitionId == l.Id ? "active" : "")"
+                          @onclick="() => SelectLeague(l.Id, l.Name)">
+                    @l.Name (@_all.Count(v => v.CompetitionId == l.Id))
+                  </button>
+                }
+              </div>
             }
-          </select>
-          <select class="sb-video-select" value="@_source" @onchange="OnSource">
-            <option value="">All sources</option>
-            @foreach (var s in _sources)
+          </div>
+
+          <div class="sb-filter-custom" @onclick:stopPropagation="true">
+            <button class="sb-filter-btn" @onclick="() => _showSourceMenu = !_showSourceMenu">
+              <span class="sb-filter-text">@(string.IsNullOrEmpty(_source) ? "All sources" : _source)</span>
+              <span class="sb-filter-arrow">▾</span>
+            </button>
+            @if (_showSourceMenu)
             {
-                <option value="@s">@s</option>
+              <div class="sb-filter-menu">
+                <button class="sb-filter-option @(string.IsNullOrEmpty(_source) ? "active" : "")"
+                        @onclick='() => SelectSource("")'>
+                  All sources
+                </button>
+                @foreach (var s in _sources)
+                {
+                  <button class="sb-filter-option @(_source == s ? "active" : "")"
+                          @onclick="() => SelectSource(s)">
+                    @s
+                  </button>
+                }
+              </div>
             }
-          </select>
-          <select class="sb-video-select" value="@_tag" @onchange="OnTag">
-            <option value="">All tags</option>
-            @foreach (var t in _tags)
+          </div>
+
+          <div class="sb-filter-custom" @onclick:stopPropagation="true">
+            <button class="sb-filter-btn" @onclick="() => _showTagMenu = !_showTagMenu">
+              <span class="sb-filter-text">@(string.IsNullOrEmpty(_tag) ? "All tags" : _tag)</span>
+              <span class="sb-filter-arrow">▾</span>
+            </button>
+            @if (_showTagMenu)
             {
-                <option value="@t">@t</option>
+              <div class="sb-filter-menu">
+                <button class="sb-filter-option @(string.IsNullOrEmpty(_tag) ? "active" : "")"
+                        @onclick='() => SelectTag("")'>
+                  All tags
+                </button>
+                @foreach (var t in _tags)
+                {
+                  <button class="sb-filter-option @(_tag == t ? "active" : "")"
+                          @onclick="() => SelectTag(t)">
+                    @t
+                  </button>
+                }
+              </div>
             }
-          </select>
-          <select class="sb-video-select" value="@_sort" @onchange="OnSort">
-            <option value="new">Newest</option>
-            <option value="old">Oldest</option>
-            <option value="title">Title</option>
-          </select>
+          </div>
+
+          <div class="sb-filter-custom" @onclick:stopPropagation="true">
+            <button class="sb-filter-btn" @onclick="() => _showSortMenu = !_showSortMenu">
+              <span class="sb-filter-text">@GetSortLabel()</span>
+              <span class="sb-filter-arrow">▾</span>
+            </button>
+            @if (_showSortMenu)
+            {
+              <div class="sb-filter-menu">
+                <button class="sb-filter-option @(_sort == "new" ? "active" : "")"
+                        @onclick='() => SelectSort("new")'>
+                  Newest
+                </button>
+                <button class="sb-filter-option @(_sort == "old" ? "active" : "")"
+                        @onclick='() => SelectSort("old")'>
+                  Oldest
+                </button>
+                <button class="sb-filter-option @(_sort == "title" ? "active" : "")"
+                        @onclick='() => SelectSort("title")'>
+                  Title
+                </button>
+              </div>
+            }
+          </div>
         </div>
       </div>
 
       @if (_loading)
       {
-        <p class="small-muted" style="margin:12px 0 0;">Loading videos…</p>
+        <GlobalSpinner Message="Loading videos…" />
       }
       else if (_filtered.Count == 0)
       {
@@ -172,6 +238,13 @@
 
   private VideoDto? _open;
 
+  // Custom dropdown states
+  private bool _showLeagueMenu;
+  private bool _showSourceMenu;
+  private bool _showTagMenu;
+  private bool _showSortMenu;
+  private string _leagueName = "All leagues";
+
   // Auto sync
   private AutoSyncLoop? _videoLoop;
   private DateTime _updatedLocal = DateTime.Now;
@@ -204,6 +277,51 @@
 
   private List<string> _sources = new();
   private List<string> _tags = new();
+
+  // Custom dropdown helpers
+  private void CloseOverlays()
+  {
+    _showLeagueMenu = false;
+    _showSourceMenu = false;
+    _showTagMenu = false;
+    _showSortMenu = false;
+  }
+
+  private async Task SelectLeague(int? id, string name)
+  {
+    _competitionId = id;
+    _leagueName = name;
+    _showLeagueMenu = false;
+    await ReloadAsync();
+  }
+
+  private async Task SelectSource(string source)
+  {
+    _source = source;
+    _showSourceMenu = false;
+    await ReloadAsync();
+  }
+
+  private async Task SelectTag(string tag)
+  {
+    _tag = tag;
+    _showTagMenu = false;
+    await ReloadAsync();
+  }
+
+  private void SelectSort(string sort)
+  {
+    _sort = sort;
+    _showSortMenu = false;
+    ApplySortAndPagingOnly();
+  }
+
+  private string GetSortLabel() => _sort switch
+  {
+    "old" => "Oldest",
+    "title" => "Title",
+    _ => "Newest"
+  };
 
   private async Task ReloadAsync(CancellationToken ct = default)
   {
@@ -371,14 +489,6 @@
     _tag = e.Value?.ToString() ?? "";
     await ReloadAsync();
   }
-
-  private Task OnSort(ChangeEventArgs e)
-  {
-    _sort = e.Value?.ToString() ?? "new";
-    ApplySortAndPagingOnly();
-    return Task.CompletedTask;
-  }
-
 
   private void Open(VideoDto v) => _open = v;
   private void Close() => _open = null;
