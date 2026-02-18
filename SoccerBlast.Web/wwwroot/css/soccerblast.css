@@ -152,3 +152,34 @@
   flex:1;
   min-width:0;
 }
+
+/* =========================
+   Global Lottie loading spinner
+========================= */
+.sb-global-spinner{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.sb-global-spinner-fullpage{
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.sb-global-spinner-lottie{
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+.sb-global-spinner-message{
+  margin: 0;
+  font-size: 15px;
+  color: #6b7280;
+}
+
+.sb-global-spinner-Small .sb-global-spinner-message{
+  font-size: 13px;
+}
