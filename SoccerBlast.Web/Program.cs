@@ -12,6 +12,7 @@ builder.Services.AddHttpClient<SoccerApiClient>(client =>
 {
     var baseUrl = builder.Configuration["Api:BaseUrl"] ?? "http://localhost:5249/";
     client.BaseAddress = new Uri(baseUrl);
+    client.Timeout = TimeSpan.FromSeconds(12);
 });
 
 builder.Services.AddScoped<BrowserTimeZone>();

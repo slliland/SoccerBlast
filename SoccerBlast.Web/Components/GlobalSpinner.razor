@@ -1,0 +1,46 @@
+@* Global loading spinner using Lottie (animations/spinner.json). Use on any page when loading. *@
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
+
+<div class="sb-global-spinner sb-global-spinner-@Size @(FullPage ? "sb-global-spinner-fullpage" : "")" aria-hidden="true">
+  <div id="@_containerId" class="sb-global-spinner-lottie" role="presentation"></div>
+  @if (!string.IsNullOrEmpty(Message))
+  {
+    <p class="sb-global-spinner-message">@Message</p>
+  }
+</div>
+
+@code {
+  [Parameter] public string? Message { get; set; }
+  [Parameter] public string Size { get; set; } = "Default"; // Default | Small
+  [Parameter] public bool FullPage { get; set; }
+
+  private static long _idCounter;
+  private string _containerId = "sb-lottie-" + System.Threading.Interlocked.Increment(ref _idCounter);
+  private const string AnimationPath = "/animations/spinner.json";
+  private int _defaultSize = 64;
+  private int _smallSize = 28;
+
+  protected override async Task OnAfterRenderAsync(bool firstRender)
+  {
+    if (!firstRender) return;
+    var size = Size == "Small" ? _smallSize : _defaultSize;
+    try
+    {
+      await JSRuntime.InvokeVoidAsync("soccerBlastLottie.init", _containerId, AnimationPath, size, size);
+    }
+    catch (Exception)
+    {
+      // Lottie or JS not ready (e.g. prerender); ignore
+    }
+  }
+
+  public async ValueTask DisposeAsync()
+  {
+    try
+    {
+      await JSRuntime.InvokeVoidAsync("soccerBlastLottie.destroy", _containerId);
+    }
+    catch (Exception) { /* ignore */ }
+  }
+}

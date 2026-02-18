@@ -15,6 +15,8 @@
     <link rel="stylesheet" href="css/follow.css" />
     <link rel="stylesheet" href="css/all.css" />
     <link rel="stylesheet" href="css/video.css" />
+    <link rel="stylesheet" href="css/news.css" />
+    <link rel="stylesheet" href="css/team.css" />
     <ImportMap />
     <link rel="icon" type="image/png" href="images/logo/soccer-blast.png" />
     <title>Soccer Blast - Live Scores, Fixtures & News</title>
@@ -27,6 +29,14 @@
     <ReconnectModal /> 
     <script src="js/tz.js"></script>
     <script src="js/prefs.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js" crossorigin="anonymous"></script>
+    <script src="js/lottie-spinner.js"></script>
+    <script>
+        window.soccerBlastBack = function () {
+            if (window.history.length > 1) window.history.back();
+            else window.location.href = '/';
+        };
+    </script>
     <script src="@Assets["_framework/blazor.web.js"]"></script>
 </body>
 
