@@ -7,6 +7,8 @@ public class MatchDto
 
     public int CompetitionId { get; set; }
     public string CompetitionName { get; set; } = "";
+    /// <summary>League badge URL from API (e.g. TheSportsDB). Used for league icons when building leagues from matches.</summary>
+    public string? CompetitionBadgeUrl { get; set; }
 
     public int HomeTeamId { get; set; }
     public string HomeTeamName { get; set; } = "";

@@ -1,5 +1,8 @@
 namespace SoccerBlast.Shared.Contracts;
 
+/// <summary>League name plus optional badge URL from API (Competition.BadgeUrl).</summary>
+public record LeagueEntryDto(string Name, string? BadgeUrl);
+
 public class TeamProfileDto
 {
     public int TeamId { get; set; }
@@ -16,12 +19,16 @@ public class TeamProfileDto
 
     // Leagues
     public string? Leagues { get; set; }
+    /// <summary>Same leagues as Leagues but with BadgeUrl when we have a matching Competition. Use for icons.</summary>
+    public List<LeagueEntryDto>? LeaguesWithBadges { get; set; }
 
     // Description
     public string? DescriptionEn { get; set; }
 
     // Media
     public string? BannerUrl { get; set; }
+    /// <summary>v2 strFanart1–4: gallery images for team page.</summary>
+    public List<string>? FanartUrls { get; set; }
     public string? JerseyUrl { get; set; }
     public string? BadgeUrl { get; set; }
     public string? LogoUrl { get; set; }
