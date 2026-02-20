@@ -12,11 +12,13 @@ namespace SoccerBlast.Api.Controllers;
 public class AdminSyncController : ControllerBase
 {
     private readonly MatchSyncService _sync;
+    private readonly TeamProfileSyncService _profileSync;
     private readonly AppDbContext _db;
 
-    public AdminSyncController(MatchSyncService sync, AppDbContext db)
+    public AdminSyncController(MatchSyncService sync, TeamProfileSyncService profileSync, AppDbContext db)
     {
         _sync = sync;
+        _profileSync = profileSync;
         _db = db;
     }
 
@@ -80,4 +82,38 @@ public class AdminSyncController : ControllerBase
         return Ok(new { from, to, daysSynced, matchesSynced });
     }
 
+    /// <summary>
+    /// Danger zone: wipe all soccer data that can be safely rebuilt from SportsDB.
+    /// Deletes rows from Matches, TeamProfiles, Players, Competitions, Venues, Teams.
+    /// Leaves news, videos, favorites, and other content untouched.
+    /// </summary>
+    [HttpPost("reset-soccer-data")]
+    public async Task<IActionResult> ResetSoccerData(CancellationToken ct = default)
+    {
+        var matchCount = await _db.Matches.CountAsync(ct);
+        var teamProfileCount = await _db.TeamProfiles.CountAsync(ct);
+        var playerCount = await _db.Players.CountAsync(ct);
+        var competitionCount = await _db.Competitions.CountAsync(ct);
+        var venueCount = await _db.Venues.CountAsync(ct);
+        var teamCount = await _db.Teams.CountAsync(ct);
+
+        _db.Matches.RemoveRange(_db.Matches);
+        _db.TeamProfiles.RemoveRange(_db.TeamProfiles);
+        _db.Players.RemoveRange(_db.Players);
+        _db.Competitions.RemoveRange(_db.Competitions);
+        _db.Venues.RemoveRange(_db.Venues);
+        _db.Teams.RemoveRange(_db.Teams);
+
+        await _db.SaveChangesAsync(ct);
+
+        return Ok(new
+        {
+            deletedMatches = matchCount,
+            deletedTeamProfiles = teamProfileCount,
+            deletedPlayers = playerCount,
+            deletedCompetitions = competitionCount,
+            deletedVenues = venueCount,
+            deletedTeams = teamCount
+        });
+    }
 }

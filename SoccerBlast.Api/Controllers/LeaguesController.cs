@@ -32,12 +32,13 @@ public class LeaguesController : ControllerBase
         var leagues = await _db.Matches
             .AsNoTracking()
             .Where(m => m.UtcDate >= startUtc && m.UtcDate < endUtc)
-            .GroupBy(m => new { m.CompetitionId, m.Competition.Name, m.Competition.Country })
+            .GroupBy(m => new { m.CompetitionId, m.Competition.Name, m.Competition.Country, m.Competition.BadgeUrl })
             .Select(g => new LeagueDto
             {
                 CompetitionId = g.Key.CompetitionId,
                 Name = g.Key.Name,
                 Country = g.Key.Country,
+                BadgeUrl = g.Key.BadgeUrl,
                 MatchCount = g.Count(),
                 LiveCount = g.Count(x => x.Status == "IN_PLAY" || x.Status == "PAUSED" || x.Status == "LIVE")
             })
