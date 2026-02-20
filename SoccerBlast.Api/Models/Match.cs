@@ -4,16 +4,16 @@ public class Match
 {
     public int Id { get; set; }
 
+    public string Provider { get; set; } = "SportsDbMatches";
+    public int ExternalId { get; set; }         // provider m.Id
+
     public DateTime UtcDate { get; set; }
     public string Status { get; set; } = "";
 
-    // optional / can be missing
     public int? HomeScore { get; set; }
     public int? AwayScore { get; set; }
 
-    // foreign key column
     public int CompetitionId { get; set; }
-    // navigation object EF can load
     public Competition Competition { get; set; } = null!;
 
     public int HomeTeamId { get; set; }
