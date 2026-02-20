@@ -13,9 +13,13 @@ public class AppDbContext : DbContext
     public DbSet<SyncLog> SyncLogs => Set<SyncLog>();
     public DbSet<NewsItem> NewsItems => Set<NewsItem>();
     public DbSet<NewsItemTeam> NewsItemTeams => Set<NewsItemTeam>();
-    public DbSet<TeamExternalMap> TeamExternalMaps => Set<TeamExternalMap>();
     public DbSet<CompetitionExternalMap> CompetitionExternalMaps => Set<CompetitionExternalMap>();
     public DbSet<TeamProfile> TeamProfiles => Set<TeamProfile>();
+    public DbSet<Player> Players => Set<Player>();
+    public DbSet<PlayerExternalMap> PlayerExternalMaps => Set<PlayerExternalMap>();
+    public DbSet<Venue> Venues => Set<Venue>();
+    public DbSet<VenueExternalMap> VenueExternalMaps => Set<VenueExternalMap>();
+    public DbSet<MatchDaySyncState> MatchDaySyncStates => Set<MatchDaySyncState>();
 
     // EF won’t try to generate IDs
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -24,13 +28,13 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<Match>(entity =>
         {
-            // Common queries: by date range
+            entity.Property(m => m.Id).ValueGeneratedOnAdd();
+
+            // Provider identity
+            entity.Property(m => m.Provider).IsRequired().HasMaxLength(32);
+            entity.HasIndex(m => new { m.Provider, m.ExternalId }).IsUnique();
             entity.HasIndex(m => m.UtcDate);
-
-            // Date + competition filter
             entity.HasIndex(m => new { m.CompetitionId, m.UtcDate });
-
-            // Team search helpers (if you later query by IDs)
             entity.HasIndex(m => new { m.HomeTeamId, m.UtcDate });
             entity.HasIndex(m => new { m.AwayTeamId, m.UtcDate });
         });
@@ -47,26 +51,14 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => x.TeamId);
             entity.HasIndex(x => x.NewsItemId);
         });
-        modelBuilder.Entity<TeamExternalMap>(entity =>
+
+        modelBuilder.Entity<Team>(entity =>
         {
-            entity.HasKey(x => new { x.TeamId, x.Provider });
-
-            entity.Property(x => x.Provider).IsRequired().HasMaxLength(32);
-            entity.Property(x => x.ExternalId).IsRequired().HasMaxLength(64);
-
-            // Prevent duplicates: same external id cannot map to multiple teams
-            entity.HasIndex(x => new { x.Provider, x.ExternalId }).IsUnique();
-
-            entity.HasIndex(x => x.ExternalId);
-            entity.HasIndex(x => x.LastSyncedUtc);
-
-            entity.HasOne(x => x.Team)
-                  .WithMany()
-                  .HasForeignKey(x => x.TeamId)
-                  .OnDelete(DeleteBehavior.Cascade);
+            entity.Property(t => t.SportsDbId).HasMaxLength(32);
+            entity.HasIndex(t => t.SportsDbId).IsUnique();
         });
 
-         modelBuilder.Entity<CompetitionExternalMap>(entity =>
+        modelBuilder.Entity<CompetitionExternalMap>(entity =>
         {
             entity.HasKey(x => new { x.CompetitionId, x.Provider });
 
@@ -93,6 +85,46 @@ public class AppDbContext : DbContext
                   .WithOne()
                   .HasForeignKey<TeamProfile>(x => x.TeamId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PlayerExternalMap>(entity =>
+        {
+            entity.HasKey(x => new { x.PlayerId, x.Provider });
+
+            entity.Property(x => x.Provider).IsRequired().HasMaxLength(32);
+            entity.Property(x => x.ExternalId).IsRequired().HasMaxLength(64);
+
+            entity.HasIndex(x => new { x.Provider, x.ExternalId }).IsUnique();
+            entity.HasIndex(x => x.ExternalId);
+            entity.HasIndex(x => x.LastSyncedUtc);
+
+            entity.HasOne(x => x.Player)
+                  .WithMany()
+                  .HasForeignKey(x => x.PlayerId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<VenueExternalMap>(entity =>
+        {
+            entity.HasKey(x => new { x.VenueId, x.Provider });
+
+            entity.Property(x => x.Provider).IsRequired().HasMaxLength(32);
+            entity.Property(x => x.ExternalId).IsRequired().HasMaxLength(64);
+
+            entity.HasIndex(x => new { x.Provider, x.ExternalId }).IsUnique();
+
+            entity.HasIndex(x => x.ExternalId);
+            entity.HasIndex(x => x.LastSyncedUtc);
+
+            entity.HasOne(x => x.Venue)
+                  .WithMany()
+                  .HasForeignKey(x => x.VenueId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MatchDaySyncState>(entity =>
+        {
+            entity.HasKey(x => x.LocalDate);
         });
     }
 }

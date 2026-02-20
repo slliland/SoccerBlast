@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SoccerBlast.Api.Data;
 
@@ -10,9 +11,11 @@ using SoccerBlast.Api.Data;
 namespace SoccerBlast.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260218033243_AddCompetitionBadgeUrl")]
+    partial class AddCompetitionBadgeUrl
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.3");
@@ -82,19 +85,11 @@ namespace SoccerBlast.Api.Migrations
                     b.Property<int>("CompetitionId")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int>("ExternalId")
-                        .HasColumnType("INTEGER");
-
                     b.Property<int?>("HomeScore")
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("HomeTeamId")
                         .HasColumnType("INTEGER");
-
-                    b.Property<string>("Provider")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("TEXT");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -113,29 +108,7 @@ namespace SoccerBlast.Api.Migrations
 
                     b.HasIndex("HomeTeamId", "UtcDate");
 
-                    b.HasIndex("Provider", "ExternalId")
-                        .IsUnique();
-
                     b.ToTable("Matches");
-                });
-
-            modelBuilder.Entity("SoccerBlast.Api.Models.MatchDaySyncState", b =>
-                {
-                    b.Property<DateOnly>("LocalDate")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("LastSyncedCount")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("LastSyncedUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Provider")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("LocalDate");
-
-                    b.ToTable("MatchDaySyncStates");
                 });
 
             modelBuilder.Entity("SoccerBlast.Api.Models.NewsItem", b =>
@@ -199,67 +172,6 @@ namespace SoccerBlast.Api.Migrations
                     b.ToTable("NewsItemTeams");
                 });
 
-            modelBuilder.Entity("SoccerBlast.Api.Models.Player", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("CurrentTeamId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime?>("DateOfBirth")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Nationality")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("PhotoUrl")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Position")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CurrentTeamId");
-
-                    b.ToTable("Players");
-                });
-
-            modelBuilder.Entity("SoccerBlast.Api.Models.PlayerExternalMap", b =>
-                {
-                    b.Property<int>("PlayerId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Provider")
-                        .HasMaxLength(32)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ExternalId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("LastSyncedUtc")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("PlayerId", "Provider");
-
-                    b.HasIndex("ExternalId");
-
-                    b.HasIndex("LastSyncedUtc");
-
-                    b.HasIndex("Provider", "ExternalId")
-                        .IsUnique();
-
-                    b.ToTable("PlayerExternalMaps");
-                });
-
             modelBuilder.Entity("SoccerBlast.Api.Models.SyncLog", b =>
                 {
                     b.Property<int>("Id")
@@ -306,16 +218,38 @@ namespace SoccerBlast.Api.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("SportsDbId")
+                    b.HasKey("Id");
+
+                    b.ToTable("Teams");
+                });
+
+            modelBuilder.Entity("SoccerBlast.Api.Models.TeamExternalMap", b =>
+                {
+                    b.Property<int>("TeamId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Provider")
                         .HasMaxLength(32)
                         .HasColumnType("TEXT");
 
-                    b.HasKey("Id");
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
 
-                    b.HasIndex("SportsDbId")
+                    b.Property<DateTime?>("LastSyncedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("TeamId", "Provider");
+
+                    b.HasIndex("ExternalId");
+
+                    b.HasIndex("LastSyncedUtc");
+
+                    b.HasIndex("Provider", "ExternalId")
                         .IsUnique();
 
-                    b.ToTable("Teams");
+                    b.ToTable("TeamExternalMaps");
                 });
 
             modelBuilder.Entity("SoccerBlast.Api.Models.TeamProfile", b =>
@@ -393,62 +327,6 @@ namespace SoccerBlast.Api.Migrations
                     b.ToTable("TeamProfiles");
                 });
 
-            modelBuilder.Entity("SoccerBlast.Api.Models.Venue", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("Capacity")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("City")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Country")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ImageUrl")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Venues");
-                });
-
-            modelBuilder.Entity("SoccerBlast.Api.Models.VenueExternalMap", b =>
-                {
-                    b.Property<int>("VenueId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Provider")
-                        .HasMaxLength(32)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ExternalId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("LastSyncedUtc")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("VenueId", "Provider");
-
-                    b.HasIndex("ExternalId");
-
-                    b.HasIndex("LastSyncedUtc");
-
-                    b.HasIndex("Provider", "ExternalId")
-                        .IsUnique();
-
-                    b.ToTable("VenueExternalMaps");
-                });
-
             modelBuilder.Entity("SoccerBlast.Api.Models.CompetitionExternalMap", b =>
                 {
                     b.HasOne("SoccerBlast.Api.Models.Competition", "Competition")
@@ -506,24 +384,15 @@ namespace SoccerBlast.Api.Migrations
                     b.Navigation("Team");
                 });
 
-            modelBuilder.Entity("SoccerBlast.Api.Models.Player", b =>
+            modelBuilder.Entity("SoccerBlast.Api.Models.TeamExternalMap", b =>
                 {
-                    b.HasOne("SoccerBlast.Api.Models.Team", "CurrentTeam")
+                    b.HasOne("SoccerBlast.Api.Models.Team", "Team")
                         .WithMany()
-                        .HasForeignKey("CurrentTeamId");
-
-                    b.Navigation("CurrentTeam");
-                });
-
-            modelBuilder.Entity("SoccerBlast.Api.Models.PlayerExternalMap", b =>
-                {
-                    b.HasOne("SoccerBlast.Api.Models.Player", "Player")
-                        .WithMany()
-                        .HasForeignKey("PlayerId")
+                        .HasForeignKey("TeamId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Player");
+                    b.Navigation("Team");
                 });
 
             modelBuilder.Entity("SoccerBlast.Api.Models.TeamProfile", b =>
@@ -535,17 +404,6 @@ namespace SoccerBlast.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("Team");
-                });
-
-            modelBuilder.Entity("SoccerBlast.Api.Models.VenueExternalMap", b =>
-                {
-                    b.HasOne("SoccerBlast.Api.Models.Venue", "Venue")
-                        .WithMany()
-                        .HasForeignKey("VenueId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Venue");
                 });
 #pragma warning restore 612, 618
         }

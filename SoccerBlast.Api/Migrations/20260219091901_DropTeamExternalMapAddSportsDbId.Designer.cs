@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SoccerBlast.Api.Data;
 
@@ -10,9 +11,11 @@ using SoccerBlast.Api.Data;
 namespace SoccerBlast.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260219091901_DropTeamExternalMapAddSportsDbId")]
+    partial class DropTeamExternalMapAddSportsDbId
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.3");
@@ -117,25 +120,6 @@ namespace SoccerBlast.Api.Migrations
                         .IsUnique();
 
                     b.ToTable("Matches");
-                });
-
-            modelBuilder.Entity("SoccerBlast.Api.Models.MatchDaySyncState", b =>
-                {
-                    b.Property<DateOnly>("LocalDate")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("LastSyncedCount")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("LastSyncedUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Provider")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("LocalDate");
-
-                    b.ToTable("MatchDaySyncStates");
                 });
 
             modelBuilder.Entity("SoccerBlast.Api.Models.NewsItem", b =>
