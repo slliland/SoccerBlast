@@ -1,0 +1,54 @@
+@using SoccerBlast.Shared.Contracts
+
+<div class="team-match-row">
+  <div class="team-match-meta">@MetaText</div>
+
+  <div class="team-match-main">
+    <img class="team-match-crest"
+         src="@HomeCrest"
+         alt="@Match.HomeTeamName"
+         loading="lazy"
+         referrerpolicy="no-referrer"
+         onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
+
+    <span class="team-match-team" title="@Match.HomeTeamName">@Match.HomeTeamName</span>
+
+    <span class="team-match-score">@ScoreText</span>
+
+    <span class="team-match-team" title="@Match.AwayTeamName">@Match.AwayTeamName</span>
+
+    <img class="team-match-crest"
+         src="@AwayCrest"
+         alt="@Match.AwayTeamName"
+         loading="lazy"
+         referrerpolicy="no-referrer"
+         onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
+  </div>
+
+<div class="team-match-comp">
+  <span class="team-match-comp-name">@(!string.IsNullOrWhiteSpace(Match.CompetitionName) ? Match.CompetitionName : "—missing—")</span>
+</div>
+</div>
+
+@code {
+  [Parameter, EditorRequired] public MatchDto Match { get; set; } = default!;
+  [Parameter] public string TimeZoneId { get; set; } = "America/New_York";
+
+  private string HomeCrest => string.IsNullOrWhiteSpace(Match.HomeTeamCrestUrl) ? "/images/teams/placeholder.png" : Match.HomeTeamCrestUrl!;
+  private string AwayCrest => string.IsNullOrWhiteSpace(Match.AwayTeamCrestUrl) ? "/images/teams/placeholder.png" : Match.AwayTeamCrestUrl!;
+
+  private string ScoreText =>
+    (Match.HomeScore.HasValue && Match.AwayScore.HasValue)
+      ? $"{Match.HomeScore}-{Match.AwayScore}"
+      : "vs";
+
+  private string MetaText
+  {
+    get
+    {
+      var tz = TimeZoneInfo.FindSystemTimeZoneById(TimeZoneId);
+      var local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(Match.UtcDate, DateTimeKind.Utc), tz);
+      return local.ToString("MMM d, yyyy • h:mm tt");
+    }
+  }
+}

@@ -1,0 +1,19 @@
+/* Venue detail page (uses team-* for shared layout) */
+.venue-hero{
+  min-height: 280px;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+}
+
+.venue-hero .team-hero-info{
+  text-align: center;
+}
+
+.venue-hero .team-hero-name{
+  text-shadow: 0 2px 12px rgba(0,0,0,0.5);
+}
+
+.venue-hero .team-hero-leagues{
+  text-shadow: 0 1px 6px rgba(0,0,0,0.4);
+}

@@ -1,0 +1,468 @@
+@page "/competition/{Id}"
+@rendermode RenderMode.InteractiveServer
+@using Microsoft.AspNetCore.Components.Web
+@using SoccerBlast.Shared.Contracts
+@using SoccerBlast.Web.Services
+@inject SoccerBlast.Web.Services.SoccerApiClient Api
+@inject NavigationManager Nav
+@inject IJSRuntime JSRuntime
+
+<div class="team-page league-page">
+  @if (_loading)
+  {
+    <div class="team-loading">
+      <GlobalSpinner Message="Loading league..." FullPage="true" />
+    </div>
+  }
+  else if (_league is null)
+  {
+    <div class="team-error">
+      <p>League not found.</p>
+      <button class="team-back-btn" @onclick="GoHome">← Back</button>
+    </div>
+  }
+  else
+  {
+    <div class="league-hero">
+      <div class="league-hero-content">
+        <button class="team-back-btn" @onclick="GoBack">Back</button>
+        <div class="league-hero-bottom">
+          <div class="league-hero-main">
+            <div class="league-hero-badge">
+              <img src="@(_league.BadgeUrl ?? LeagueIconMap.GetByName(_league.Name) ?? LeagueIconMap.DefaultLeagueIcon)"
+                   alt="@_league.Name"
+                   loading="lazy"
+                   referrerpolicy="no-referrer"
+                   onerror="this.onerror=null; this.src='/images/icons/world-cup.png';" />
+            </div>
+            <div class="league-hero-text">
+              <h1>@_league.Name</h1>
+              @if (!string.IsNullOrWhiteSpace(_league.Country ?? _league.Profile?.Country))
+              {
+                <p class="league-hero-sub">@(_league.Profile?.Country ?? _league.Country)</p>
+              }
+            </div>
+          </div>
+          <div class="league-hero-meta">
+            <div class="league-meta-item">
+              <span class="league-hero-label">Matches tracked</span>
+              <span class="league-hero-value">@_league.MatchCount</span>
+            </div>
+            @if (_league.Profile?.CurrentSeason != null)
+            {
+              <div class="league-meta-item">
+                <span class="league-hero-label">Current season</span>
+                <span class="league-hero-value">@_league.Profile.CurrentSeason</span>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="team-layout">
+      <div class="team-tabs">
+        <button class="team-tab @(_activeTab == "overview" ? "active" : "")" @onclick='() => _activeTab = "overview"'>
+          <img src="/images/teams/overview.png" alt="Overview" class="team-tab-icon" />
+          <span>Overview</span>
+        </button>
+        <button class="team-tab @(_activeTab == "teams" ? "active" : "")" @onclick='() => _activeTab = "teams"'>
+          <img src="/images/teams/soccer-player.png" alt="Teams" class="team-tab-icon" />
+          <span>Teams</span>
+        </button>
+        <button class="team-tab @(_activeTab == "matches" ? "active" : "")" @onclick='() => _activeTab = "matches"'>
+          <img src="/images/icons/football-pitch.png" alt="Matches" class="team-tab-icon" />
+          <span>Matches</span>
+        </button>
+        <button class="team-tab @(_activeTab == "seasons" ? "active" : "")" @onclick='() => _activeTab = "seasons"'>
+          <img src="/images/icons/pinned.png" alt="Seasons" class="team-tab-icon" />
+          <span>Seasons</span>
+        </button>
+      </div>
+
+      <div class="team-content">
+        @if (_activeTab == "overview")
+        {
+          <div class="team-tab-content">
+            <div class="team-info-row">
+              <div class="team-info-item">
+                <span class="team-info-label">Matches tracked</span>
+                <span class="team-info-value">@_league.MatchCount</span>
+              </div>
+              @if (!string.IsNullOrWhiteSpace(_league.Country ?? _league.Profile?.Country))
+              {
+                <div class="team-info-item">
+                  <span class="team-info-label">Country</span>
+                  <span class="team-info-value">@(_league.Profile?.Country ?? _league.Country)</span>
+                </div>
+              }
+              @if (_league.Profile?.FormedYear != null)
+              {
+                <div class="team-info-item">
+                  <span class="team-info-label">Established</span>
+                  <span class="team-info-value">@_league.Profile.FormedYear</span>
+                </div>
+              }
+              @if (_league.Profile?.FirstEventDateUtc != null)
+              {
+                <div class="team-info-item">
+                  <span class="team-info-label">First Recorded Event</span>
+                  <span class="team-info-value">@_league.Profile.FirstEventDateUtc.Value.ToString("yyyy-MM-dd")</span>
+                </div>
+              }
+              @if (!string.IsNullOrWhiteSpace(_league.Profile?.Sport))
+              {
+                <div class="team-info-item">
+                  <span class="team-info-label">Sport</span>
+                  <span class="team-info-value">@_league.Profile.Sport</span>
+                </div>
+              }
+              @if (!string.IsNullOrWhiteSpace(_league.Profile?.Gender))
+              {
+                <div class="team-info-item">
+                  <span class="team-info-label">Gender</span>
+                  <span class="team-info-value">@_league.Profile.Gender</span>
+                </div>
+              }
+              @if (!string.IsNullOrWhiteSpace(_league.Profile?.CurrentSeason))
+              {
+                <div class="team-info-item">
+                  <span class="team-info-label">Current Season</span>
+                  <span class="team-info-value">@_league.Profile.CurrentSeason</span>
+                </div>
+              }
+              @if (_league.Profile?.CurrentRound != null)
+              {
+                <div class="team-info-item">
+                  <span class="team-info-label">Current Round</span>
+                  <span class="team-info-value">@_league.Profile.CurrentRound</span>
+                </div>
+              }
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_league.Profile?.DescriptionEn))
+            {
+              <div class="team-section-block">
+                <h3 class="team-block-title">About this league</h3>
+                <div class="team-about-text">
+                  @_league.Profile.DescriptionEn
+                </div>
+              </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(_league.Profile?.TvRights))
+            {
+              <div class="team-section-block">
+                <h3 class="team-block-title">TV Rights</h3>
+                <div class="team-about-text">
+                  @_league.Profile.TvRights
+                </div>
+              </div>
+            }
+
+            @if (_league.Profile == null)
+            {
+              <div class="team-empty team-empty-muted">
+                <p class="small-muted">Extended league info (teams, seasons, description) is not available for this competition. You can still view matches in the Matches tab.</p>
+              </div>
+            }
+          </div>
+        }
+        else if (_activeTab == "teams")
+        {
+          <div class="team-tab-content">
+            @if (_league.Teams == null || _league.Teams.Count == 0)
+            {
+              <div class="team-empty">
+                <h3>No teams available</h3>
+                <p class="small-muted">Teams list not available for this league.</p>
+              </div>
+            }
+            else
+            {
+              <div class="league-teams-grid">
+                @foreach (var t in _league.Teams.OrderBy(t => t.Name))
+                {
+                  <button class="league-team-card" @onclick='() => Nav.NavigateTo($"/team/{t.IdTeam}")'>
+                    <img src="@(t.BadgeUrl ?? LeagueIconMap.DefaultLeagueIcon)"
+                         alt="@t.Name"
+                         class="league-team-badge"
+                         loading="lazy"
+                         referrerpolicy="no-referrer"
+                         onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
+                    <span class="league-team-name">@t.Name</span>
+                  </button>
+                }
+              </div>
+            }
+          </div>
+        }
+        else if (_activeTab == "matches")
+        {
+          <div class="team-tab-content">
+            @if (IsExternalLeague && _league?.Seasons?.Count > 0)
+            {
+              <div class="league-schedule-header">
+                <h3 class="team-block-title">Fixtures & results</h3>
+                <select class="league-season-select" value="@_selectedSeason" @onchange="OnSeasonChanged">
+                  @foreach (var s in _league.Seasons.OrderByDescending(x => x))
+                  {
+                    <option value="@s">@s</option>
+                  }
+                </select>
+              </div>
+            }
+            else if (!IsExternalLeague)
+            {
+              <h3 class="team-block-title">Matches (±7 days)</h3>
+            }
+            @if (_loadingSchedule)
+            {
+              <div class="team-empty team-empty-loading">
+                <GlobalSpinner Message="Loading fixtures..." />
+              </div>
+            }
+            else if (_matches == null)
+            {
+              <div class="team-empty team-empty-loading">
+                <GlobalSpinner Message="Loading matches..." />
+              </div>
+            }
+            else if (_matches.Count == 0)
+            {
+              <div class="team-empty">
+                <h3>@(IsExternalLeague ? "No fixtures for this season" : "No matches in range")</h3>
+                <p class="small-muted">@(IsExternalLeague ? "TSDB may not have data for this season." : "Try changing the date range on the All Matches page.")</p>
+              </div>
+            }
+            else
+            {
+              var nowUtc = DateTime.UtcNow;
+              var upcoming = _matches.Where(m => m.UtcDate > nowUtc).OrderBy(m => m.UtcDate).ToList();
+              var results = _matches.Where(m => m.UtcDate <= nowUtc).OrderByDescending(m => m.UtcDate).ToList();
+              <div class="league-matches-sections">
+                @if (upcoming.Count > 0)
+                {
+                  <h4 class="league-section-title">Upcoming</h4>
+                  <div class="am-list">
+                    @foreach (var m in upcoming)
+                    {
+                      <div class="am-match">
+                        <div class="am-time">@(m.UtcDate.TimeOfDay.TotalSeconds > 0 ? FormatLocalTime(m.UtcDate) : m.UtcDate.ToString("yyyy-MM-dd"))</div>
+                        <div class="am-team">
+                          <img class="am-crest" src="@(string.IsNullOrWhiteSpace(m.HomeTeamCrestUrl) ? "/images/teams/placeholder.png" : m.HomeTeamCrestUrl)" alt="@m.HomeTeamName" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
+                          <div class="am-name-row"><div class="am-name" title="@m.HomeTeamName">@m.HomeTeamName</div></div>
+                        </div>
+                        <div class="am-team">
+                          <img class="am-crest" src="@(string.IsNullOrWhiteSpace(m.AwayTeamCrestUrl) ? "/images/teams/placeholder.png" : m.AwayTeamCrestUrl)" alt="@m.AwayTeamName" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
+                          <div class="am-name-row"><div class="am-name" title="@m.AwayTeamName">@m.AwayTeamName</div></div>
+                        </div>
+                        <div class="am-right"><div class="am-score"><span class="num">@MatchDisplayHelper.FormatScore(m.HomeScore)</span><span class="sep">:</span><span class="num">@MatchDisplayHelper.FormatScore(m.AwayScore)</span></div></div>
+                      </div>
+                    }
+                  </div>
+                }
+                @if (results.Count > 0)
+                {
+                  <h4 class="league-section-title">Results</h4>
+                  <div class="am-list">
+                    @foreach (var m in results)
+                    {
+                      <div class="am-match">
+                        <div class="am-time">@(m.UtcDate.TimeOfDay.TotalSeconds > 0 ? FormatLocalTime(m.UtcDate) : m.UtcDate.ToString("yyyy-MM-dd"))</div>
+                        <div class="am-team">
+                          <img class="am-crest" src="@(string.IsNullOrWhiteSpace(m.HomeTeamCrestUrl) ? "/images/teams/placeholder.png" : m.HomeTeamCrestUrl)" alt="@m.HomeTeamName" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
+                          <div class="am-name-row"><div class="am-name" title="@m.HomeTeamName">@m.HomeTeamName</div></div>
+                        </div>
+                        <div class="am-team">
+                          <img class="am-crest" src="@(string.IsNullOrWhiteSpace(m.AwayTeamCrestUrl) ? "/images/teams/placeholder.png" : m.AwayTeamCrestUrl)" alt="@m.AwayTeamName" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
+                          <div class="am-name-row"><div class="am-name" title="@m.AwayTeamName">@m.AwayTeamName</div></div>
+                        </div>
+                        <div class="am-right"><div class="am-score"><span class="num">@MatchDisplayHelper.FormatScore(m.HomeScore)</span><span class="sep">:</span><span class="num">@MatchDisplayHelper.FormatScore(m.AwayScore)</span></div></div>
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
+        else if (_activeTab == "seasons")
+        {
+          <div class="team-tab-content">
+            <h3 class="team-block-title">Past seasons</h3>
+            @if (_league?.Seasons == null || _league.Seasons.Count == 0)
+            {
+              <div class="team-empty">
+                <p class="small-muted">Season history is not available for this league.</p>
+              </div>
+            }
+            else
+            {
+              <div class="league-seasons-list">
+                @foreach (var s in _league.Seasons.OrderByDescending(x => x))
+                {
+                  <button type="button"
+                          class="league-season-btn @(s == _selectedSeason ? "active" : "")"
+                          @onclick="() => SelectSeason(s)">
+                    @s
+                  </button>
+                }
+              </div>
+              @if (!string.IsNullOrEmpty(_selectedSeason))
+              {
+                <h4 class="league-season-fixtures-title">Fixtures for @_selectedSeason</h4>
+                @if (_loadingSchedule)
+                {
+                  <div class="team-empty team-empty-loading">
+                    <GlobalSpinner Message="Loading fixtures..." />
+                  </div>
+                }
+                else if (_matches != null && _matches.Count > 0)
+                {
+                  <div class="am-list league-season-matches">
+                    @foreach (var m in _matches.OrderBy(m => m.UtcDate))
+                    {
+                      <div class="am-match">
+                        <div class="am-time">@(m.UtcDate.TimeOfDay.TotalSeconds > 0 ? FormatLocalTime(m.UtcDate) : m.UtcDate.ToString("yyyy-MM-dd"))</div>
+                        <div class="am-team">
+                          <img class="am-crest" src="@(string.IsNullOrWhiteSpace(m.HomeTeamCrestUrl) ? "/images/teams/placeholder.png" : m.HomeTeamCrestUrl)" alt="@m.HomeTeamName" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
+                          <div class="am-name-row"><div class="am-name" title="@m.HomeTeamName">@m.HomeTeamName</div></div>
+                        </div>
+                        <div class="am-team">
+                          <img class="am-crest" src="@(string.IsNullOrWhiteSpace(m.AwayTeamCrestUrl) ? "/images/teams/placeholder.png" : m.AwayTeamCrestUrl)" alt="@m.AwayTeamName" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
+                          <div class="am-name-row"><div class="am-name" title="@m.AwayTeamName">@m.AwayTeamName</div></div>
+                        </div>
+                        <div class="am-right">
+                          <div class="am-score">
+                            <span class="num">@MatchDisplayHelper.FormatScore(m.HomeScore)</span>
+                            <span class="sep">:</span>
+                            <span class="num">@MatchDisplayHelper.FormatScore(m.AwayScore)</span>
+                          </div>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                }
+                else if (_matches != null)
+                {
+                  <p class="small-muted">No fixtures returned for this season.</p>
+                }
+              }
+            }
+          </div>
+        }
+      </div>
+    </div>
+  }
+</div>
+
+@code {
+  [Parameter] public string? Id { get; set; }
+
+  private bool _loading = true;
+  private bool _loadingSchedule = false;
+  private CompetitionDetailDto? _league;
+  private List<MatchDto>? _matches;
+  private string _activeTab = "overview";
+  private string _selectedSeason = "";
+
+  private bool IsExternalLeague => _league?.Id == 0;
+
+  protected override async Task OnParametersSetAsync()
+  {
+    _loading = true;
+    _league = null;
+    _matches = null;
+    _selectedSeason = "";
+
+    try
+    {
+      if (string.IsNullOrWhiteSpace(Id)) return;
+      using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+      _league = await Api.GetCompetitionAsync(Id!, cts.Token);
+      if (_league != null)
+      {
+        if (IsExternalLeague)
+        {
+          _selectedSeason = _league.Profile?.CurrentSeason ?? _league.Seasons?.FirstOrDefault() ?? "";
+          if (!string.IsNullOrEmpty(_selectedSeason))
+            await LoadScheduleForSeasonAsync();
+          if (_league.Profile == null)
+            _activeTab = "matches";
+        }
+        else
+        {
+          var today = DateOnly.FromDateTime(DateTime.UtcNow);
+          var from = today.AddDays(-7);
+          var to = today.AddDays(7);
+          _matches = await Api.GetRangeAsync(from, to, _league.Id);
+          if (_league.Profile == null)
+            _activeTab = "matches";
+        }
+      }
+    }
+    catch
+    {
+      _league = null;
+    }
+    finally
+    {
+      _loading = false;
+    }
+  }
+
+  private async Task LoadScheduleForSeasonAsync()
+  {
+    if (string.IsNullOrWhiteSpace(Id) || string.IsNullOrWhiteSpace(_selectedSeason)) return;
+    _loadingSchedule = true;
+    _matches = null;
+    try
+    {
+      _matches = await Api.GetLeagueScheduleAsync(Id!, _selectedSeason);
+    }
+    finally
+    {
+      _loadingSchedule = false;
+    }
+  }
+
+  private async Task OnSeasonChanged(ChangeEventArgs e)
+  {
+    var season = e.Value?.ToString();
+    if (string.IsNullOrEmpty(season)) return;
+    _selectedSeason = season;
+    await LoadScheduleForSeasonAsync();
+  }
+
+  private async Task SelectSeason(string season)
+  {
+    _selectedSeason = season;
+    await LoadScheduleForSeasonAsync();
+  }
+
+  private async Task GoBack()
+  {
+    try
+    {
+      await JSRuntime.InvokeVoidAsync("soccerBlastBack");
+    }
+    catch
+    {
+      Nav.NavigateTo("/", forceLoad: false);
+    }
+  }
+
+  private void GoHome()
+  {
+    Nav.NavigateTo("/");
+  }
+
+  private string FormatLocalTime(DateTime utcDate)
+  {
+    var tz = TimeZoneInfo.FindSystemTimeZoneById(Api.TimeZoneId);
+    var local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utcDate, DateTimeKind.Utc), tz);
+    return local.ToString("HH:mm");
+  }
+}
+

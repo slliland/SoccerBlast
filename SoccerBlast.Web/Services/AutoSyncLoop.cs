@@ -2,13 +2,11 @@ using System.Threading;
 
 namespace SoccerBlast.Web.Services;
 
-/// <summary>
-/// Small reusable periodic loop runner for pages.
-/// </summary>
 public sealed class AutoSyncLoop : IDisposable
 {
     private readonly TimeSpan _interval;
     private readonly Func<CancellationToken, Task> _onTick;
+    private readonly Action<Exception>? _onError;
 
     private PeriodicTimer? _timer;
     private CancellationTokenSource? _cts;
@@ -16,18 +14,19 @@ public sealed class AutoSyncLoop : IDisposable
     private volatile int _running; // 0/1 guard
     private bool _started;
 
-    public AutoSyncLoop(TimeSpan interval, Func<CancellationToken, Task> onTick)
+    public AutoSyncLoop(TimeSpan interval, Func<CancellationToken, Task> onTick, Action<Exception>? onError = null)
     {
         _interval = interval;
         _onTick = onTick;
+        _onError = onError;
     }
 
-    public bool IsRunning => _started;
+    public bool IsRunning => Volatile.Read(ref _started);
 
     public void Start()
     {
-        if (_started) return;
-        _started = true;
+        if (Volatile.Read(ref _started)) return;
+        Volatile.Write(ref _started, true);
 
         _cts?.Cancel();
         _cts?.Dispose();
@@ -41,25 +40,23 @@ public sealed class AutoSyncLoop : IDisposable
 
     public void Stop()
     {
-        _started = false;
-        try
-        {
-            _cts?.Cancel();
-        }
-        catch { /* ignore */ }
+        Volatile.Write(ref _started, false);
+        try { _cts?.Cancel(); } catch { }
     }
 
     private async Task RunAsync(CancellationToken token)
     {
         try
         {
-            while (!token.IsCancellationRequested && _timer != null)
+            while (!token.IsCancellationRequested)
             {
-                var ok = await _timer.WaitForNextTickAsync(token);
-                if (!ok) break;
-                if (!_started) continue;
+                var timer = _timer;
+                if (timer is null) break;
 
-                // no overlap
+                var ok = await timer.WaitForNextTickAsync(token);
+                if (!ok) break;
+                if (!Volatile.Read(ref _started)) continue;
+
                 if (Interlocked.Exchange(ref _running, 1) == 1)
                     continue;
 
@@ -67,9 +64,9 @@ public sealed class AutoSyncLoop : IDisposable
                 {
                     await _onTick(token);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // swallow errors so the loop keeps running
+                    _onError?.Invoke(ex);
                 }
                 finally
                 {
@@ -77,9 +74,9 @@ public sealed class AutoSyncLoop : IDisposable
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // ignore timer/cancel exceptions
+            _onError?.Invoke(ex);
         }
     }
 
@@ -91,6 +88,6 @@ public sealed class AutoSyncLoop : IDisposable
             _timer?.Dispose();
             _cts?.Dispose();
         }
-        catch { /* ignore */ }
+        catch { }
     }
 }

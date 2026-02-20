@@ -1,0 +1,266 @@
+/* Competition / League detail page – structure aligned with team.css */
+.league-page{
+  min-height: 100vh;
+  background: #f9fafb;
+}
+
+/* Force team crests visible in matches list (override any opacity/visibility hide) */
+.league-page .am-list .am-crest{
+  opacity: 1 !important;
+  visibility: visible !important;
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
+  display: block !important;
+}
+
+/* Hero: same pattern as team-hero (content wrapper + overlay-style gradient) */
+.league-hero{
+  position: relative;
+  min-height: 280px;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+  overflow: hidden;
+}
+
+.league-hero-content{
+  position: relative;
+  z-index: 1;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 32px;
+  height: 100%;
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.league-hero-content .team-back-btn{
+  align-self: flex-start;
+}
+
+.league-hero-bottom{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.league-hero-main{
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.league-hero-badge{
+  flex-shrink: 0;
+}
+
+.league-hero-badge img{
+  width: 88px;
+  height: 88px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 12px rgba(0,0,0,0.3));
+}
+
+.league-hero-text{
+  min-width: 0;
+}
+
+.league-hero-text h1{
+  font-size: 32px;
+  font-weight: 800;
+  color: #fff;
+  margin: 0 0 8px 0;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  letter-spacing: -0.5px;
+}
+
+.league-hero-sub{
+  font-size: 15px;
+  color: rgba(255,255,255,0.9);
+  margin: 0;
+  font-weight: 500;
+}
+
+.league-hero-meta{
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-shrink: 0;
+}
+
+.league-meta-item{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.league-hero-label{
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.75);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.league-hero-value{
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* Layout: team-layout from team.css handles max-width + tabs + content */
+.league-page .team-layout{
+  padding: 32px;
+}
+
+.league-teams-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.league-team-card{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.league-team-card:hover{
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  transform: translateY(-2px);
+}
+
+.league-team-badge{
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+
+.league-team-name{
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  text-align: center;
+}
+
+.league-seasons-grid{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.league-season-pill{
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+}
+
+/* Season selector + past seasons layout */
+.league-schedule-header{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.league-schedule-header .team-block-title{
+  margin: 0;
+}
+
+.league-season-select{
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  background: #fff;
+  min-width: 140px;
+}
+
+.league-seasons-list{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.league-season-btn{
+  padding: 10px 18px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.league-season-btn:hover{
+  background: #fff;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+}
+
+.league-season-btn.active{
+  background: #1e40af;
+  border-color: #1e40af;
+  color: #fff;
+}
+
+.league-season-fixtures-title{
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 16px 0;
+}
+
+.league-season-matches{
+  margin-top: 8px;
+}
+
+.league-matches-sections{
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.league-section-title{
+  font-size: 16px;
+  font-weight: 700;
+  color: #374151;
+  margin: 0 0 12px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.team-empty-muted{
+  padding: 24px;
+  text-align: center;
+}
+
+.team-empty-muted .small-muted{
+  margin: 0;
+  max-width: 480px;
+  margin-left: auto;
+  margin-right: auto;
+}

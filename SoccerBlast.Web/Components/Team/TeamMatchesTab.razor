@@ -1,0 +1,295 @@
+@using SoccerBlast.Shared.Contracts
+@using SoccerBlast.Web.Services
+@inject SoccerApiClient Api
+
+<!-- Range Controls at top -->
+<div class="team-matches-range">
+  <div class="team-range-row">
+    <label>From</label>
+    <input type="date"
+           value="@From.ToString("yyyy-MM-dd")"
+           @onchange="OnFromChanged" />
+
+    <label>To</label>
+    <input type="date"
+           value="@To.ToString("yyyy-MM-dd")"
+           @onchange="OnToChanged" />
+
+    @if (Loading)
+    {
+      <div class="sb-sync-spinner" style="width:18px;height:18px;border-width:3px;"></div>
+    }
+  </div>
+</div>
+
+@if (Loading)
+{
+  <GlobalSpinner Message="Loading matches..." />
+}
+else if (!string.IsNullOrWhiteSpace(Error))
+{
+  <div class="team-empty">
+    <h3>Couldn't load matches</h3>
+    <p class="small-muted">@Error</p>
+  </div>
+}
+else if (Matches == null || Matches.Count == 0)
+{
+  <div class="team-empty">
+    <h3>No matches found</h3>
+    <p class="small-muted">Try expanding the date range.</p>
+  </div>
+}
+else
+{
+  <!-- Next Event -->
+  <div class="team-section-block">
+    <h3 class="team-block-title">Next Event</h3>
+    @if (NextEvent == null)
+    {
+      <p class="small-muted">No upcoming match in the selected range.</p>
+    }
+    else
+    {
+      <MatchRow Match="NextEvent" TimeZoneId="@Api.TimeZoneId" />
+    }
+  </div>
+
+  <!-- Recent Form -->
+  <div class="team-section-block">
+    <h3 class="team-block-title">Recent Form</h3>
+    @if (RecentForm.Count == 0)
+    {
+      <p class="small-muted">No completed matches yet.</p>
+    }
+    else
+    {
+      <div class="team-form-strip">
+        @foreach (var m in RecentForm)
+        {
+          <span class="team-form-pill @FormClass(m)">@FormLetter(m)</span>
+        }
+      </div>
+
+      <div class="team-matches-list">
+        @foreach (var m in RecentForm)
+        {
+          <MatchRow Match="@m" TimeZoneId="@Api.TimeZoneId" />
+        }
+      </div>
+    }
+  </div>
+
+  <!-- Upcoming -->
+  <div class="team-section-block">
+    <h3 class="team-block-title">Upcoming</h3>
+    @if (Upcoming.Count == 0)
+    {
+      <p class="small-muted">No upcoming matches in range.</p>
+    }
+    else
+    {
+      <div class="team-matches-list">
+        @foreach (var m in Upcoming)
+        {
+          <MatchRow Match="@m" TimeZoneId="@Api.TimeZoneId" />
+        }
+      </div>
+    }
+  </div>
+
+  <!-- Results -->
+  <div class="team-section-block">
+    <h3 class="team-block-title">Results</h3>
+    @if (Results.Count == 0)
+    {
+      <p class="small-muted">No results in range.</p>
+    }
+    else
+    {
+      <div class="team-matches-list">
+        @foreach (var m in Results)
+        {
+          <MatchRow Match="@m" TimeZoneId="@Api.TimeZoneId" />
+        }
+      </div>
+    }
+  </div>
+}
+
+@code {
+  [Parameter] public bool IsActive { get; set; }
+  [Parameter] public string TeamName { get; set; } = "";
+  [Parameter] public bool IsExternalTeam { get; set; }
+  [Parameter] public string? SportsDbTeamId { get; set; }
+
+  [Parameter] public DateOnly From { get; set; }
+  [Parameter] public DateOnly To { get; set; }
+  [Parameter] public EventCallback<(DateOnly From, DateOnly To)> RangeChanged { get; set; }
+  [Parameter] public int? TeamId { get; set; }
+
+  private bool Loading;
+  private string? Error;
+
+  private List<MatchDto>? Matches;
+  private MatchDto? NextEvent;
+  private List<MatchDto> Upcoming = new();
+  private List<MatchDto> Results = new();
+  private List<MatchDto> RecentForm = new();
+
+  private CancellationTokenSource? _loadCts;
+  private CancellationTokenSource? _debounceCts;
+  private bool _loadedOnce;
+
+  protected override async Task OnParametersSetAsync()
+  {
+    if (IsActive && !_loadedOnce)
+    {
+      _loadedOnce = true;
+      await LoadMatchesAsync();
+    }
+  }
+
+  private async Task OnFromChanged(ChangeEventArgs e)
+  {
+    if (DateOnly.TryParse(e.Value?.ToString(), out var d))
+      From = d;
+
+    await NormalizeAndScheduleReloadAsync();
+  }
+
+  private async Task OnToChanged(ChangeEventArgs e)
+  {
+    if (DateOnly.TryParse(e.Value?.ToString(), out var d))
+      To = d;
+
+    await NormalizeAndScheduleReloadAsync();
+  }
+
+  private async Task NormalizeAndScheduleReloadAsync()
+  {
+    if (From > To)
+      (From, To) = (To, From);
+
+    if (RangeChanged.HasDelegate)
+      await RangeChanged.InvokeAsync((From, To));
+
+    if (!IsActive) return;
+
+    _debounceCts?.Cancel();
+    _debounceCts?.Dispose();
+    _debounceCts = new CancellationTokenSource();
+    var token = _debounceCts.Token;
+
+    try
+    {
+      await Task.Delay(300, token);
+      await LoadMatchesAsync();
+    }
+    catch (OperationCanceledException) { }
+  }
+
+  private async Task LoadMatchesAsync()
+  {
+    _loadCts?.Cancel();
+    _loadCts?.Dispose();
+    _loadCts = new CancellationTokenSource(TimeSpan.FromSeconds(12));
+    var ct = _loadCts.Token;
+
+    Loading = true;
+    Error = null;
+
+    try
+    {
+      List<MatchDto> data;
+
+      if (IsExternalTeam && !string.IsNullOrWhiteSpace(SportsDbTeamId))
+        data = await Api.GetExternalMatchesAsync(SportsDbTeamId!, From, To, ct);
+      else
+      {
+        if (TeamId is null || TeamId <= 0)
+        {
+            Matches = new();
+            Error = "Missing TeamId for match search.";
+            return;
+        }
+
+        await Api.EnsureTeamScheduleAsync(TeamId.Value, From, To, ct);
+
+        data = await Api.SearchMatchesAsync(
+              team: "",
+              from: From,
+              to: To,
+              competitionId: null,
+              limit: 300,
+              teamId: TeamId,
+              exact: false,
+              ct: ct
+          );
+      }
+      Matches = data;
+      BuildSections();
+    }
+    catch (OperationCanceledException)
+    {
+      // debounced or canceled
+    }
+    catch (Exception ex)
+    {
+      Error = $"Failed to load matches: {ex.Message}";
+    }
+    finally
+    {
+      Loading = false;
+      await InvokeAsync(StateHasChanged);
+    }
+  }
+
+ private static DateTime AsUtc(DateTime dt)
+    => dt.Kind == DateTimeKind.Utc ? dt : DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+
+  private void BuildSections()
+  {
+      NextEvent = null;
+      Upcoming = new();
+      Results = new();
+      RecentForm = new();
+
+      if (Matches == null || Matches.Count == 0) return;
+
+      var nowUtc = DateTime.UtcNow;
+
+      var upcoming = Matches
+          .Where(m => AsUtc(m.UtcDate) >= nowUtc)
+          .OrderBy(m => AsUtc(m.UtcDate))
+          .ToList();
+
+      var results = Matches
+          .Where(m => AsUtc(m.UtcDate) < nowUtc)
+          .OrderByDescending(m => AsUtc(m.UtcDate))
+          .ToList();
+
+      NextEvent = upcoming.FirstOrDefault();
+      Upcoming = upcoming.Take(20).ToList();
+      Results  = results.Take(20).ToList();
+      RecentForm = results.Take(5).ToList();
+  }
+
+  private string FormLetter(MatchDto m)
+  {
+    var team = (TeamName ?? "").Trim().ToLowerInvariant();
+    var home = (m.HomeTeamName ?? "").Trim().ToLowerInvariant();
+    var away = (m.AwayTeamName ?? "").Trim().ToLowerInvariant();
+
+    var isHome = home.Contains(team);
+    var my  = isHome ? (m.HomeScore ?? 0) : (m.AwayScore ?? 0);
+    var opp = isHome ? (m.AwayScore ?? 0) : (m.HomeScore ?? 0);
+
+    if (my > opp) return "W";
+    if (my < opp) return "L";
+    return "D";
+  }
+
+  private string FormClass(MatchDto m)
+    => FormLetter(m) switch { "W" => "win", "L" => "loss", _ => "draw" };
+}

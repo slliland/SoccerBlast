@@ -7,6 +7,8 @@
   --am-brand:#f59e0b;
   --am-green:#22c55e;
   --am-shell-pad:24px;
+  --am-brand-tint: rgba(245,158,11,0.07);
+  --am-radius-sm: 10px;
 }
 
 /* Make sure sticky works + no bleeding */
@@ -16,52 +18,76 @@
   background-attachment: fixed;
 }
 
-.sb-shell{
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: var(--am-shell-pad) 16px;
+/* Shell — same as dashboard: top/side padding creates gap for mask */
+.all-page .sb-shell{
+  max-width: 1200px !important;
+  margin: 0 auto !important;
+  padding: 24px 20px !important;
+  position: relative !important;
+  z-index: 0 !important;
 }
 
-/* 🔥 IMPORTANT: topbar blocks content when scrolling */
-.sb-topbar{
-  position: sticky;
-  top: var(--am-shell-pad);
-  z-index: 9999;
-  isolation: isolate;
-  overflow: hidden;
+/* Fixed mask strip above topbar (same as dashboard .sb-grid::after) */
+.all-page .sb-shell::after{
+  content: "" !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 50% !important;
+  transform: translateX(-48%) !important;
+  width: min(1200px, calc(100vw - 2px)) !important;
+  height: 40px !important;
+  background: var(--bg, #fefdfb) !important;
+  backdrop-filter: blur(20px) !important;
+  z-index: 9998 !important;
+  pointer-events: none !important;
+}
 
-  background: #fff;              /* MUST be opaque */
-  border: 1px solid rgba(229,231,235,.9);
-  border-radius: 16px;
-  box-shadow: 0 14px 36px rgba(17,24,39,.14);
+/* Topbar — same as dashboard: padding + blocker layer */
+.all-page .sb-topbar{
+  position: sticky !important;
+  top: 24px !important;
+  z-index: 9999 !important;
+  isolation: isolate !important;
+  overflow: hidden !important;
+
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 14px 20px !important;
+  border-radius: var(--radius-lg, 16px) !important;
+
+  background: var(--card, #fff) !important;
+  border: 1px solid var(--line, #e5e7eb) !important;
+  box-shadow: 0 4px 24px rgba(17,24,39,.08) !important;
 }
 
 /* extra “blocker” layer so nothing shows through */
-.sb-topbar::before{
-  content:"";
-  position:absolute;
-  inset:0;
-  background:#fff;               /* fully opaque */
-  backdrop-filter: blur(12px);
-  z-index:0;
-  pointer-events:none;
+.all-page .sb-topbar::before{
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  background: var(--card, #fff) !important;
+  backdrop-filter: blur(12px) !important;
+  pointer-events: none !important;
+  z-index: 0 !important;
+  border-radius: var(--radius-lg, 16px) !important;
 }
 
-.sb-topbar > *{
-  position: relative;
-  z-index: 1;
+.all-page .sb-topbar > *{
+  position: relative !important;
+  z-index: 1 !important;
 }
 
-/* ensure the list never draws above topbar */
-.sb-main{
-  position: relative;
-  z-index: 2;
-  margin-top: 12px;
-  padding: 16px;
-  background: var(--am-card);
-  border: 1px solid rgba(229,231,235,.9);
-  border-radius: 16px;
-  box-shadow: 0 10px 24px rgba(17,24,39,.06);
+/* Main matches card — same as dashboard .sb-card + generous content padding */
+.all-page .sb-main{
+  position: relative !important;
+  z-index: 2 !important;
+  margin-top: 16px !important;
+  padding: 28px 24px !important;
+  background: var(--card, #fff) !important;
+  border: 1px solid var(--line, #e5e7eb) !important;
+  border-radius: var(--radius-lg, 16px) !important;
+  box-shadow: 0 4px 20px rgba(17,24,39,.04) !important;
 }
 
 .section-head{
@@ -197,13 +223,13 @@
 }
 
 .am-crest{
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: 6px;
   object-fit: contain;
   background: #f3f4f6;
   flex: 0 0 auto;
-  opacity: 0;
+  opacity: 1;
   transition: opacity .15s ease;
 }
 
@@ -424,6 +450,54 @@
   color: var(--am-brand);
 }
 
+/* League filter inside dropdown — modern, matches dashboard */
+.sb-league-filter-inmenu{
+  padding: 8px 10px 6px;
+  border-bottom: 1px solid var(--am-line);
+  position: sticky;
+  top: 0;
+  background: var(--am-card);
+  z-index: 1;
+}
+.sb-league-filter-inmenu .sb-league-filter{
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px 9px 36px;
+  border: 1px solid var(--am-line);
+  border-radius: 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--am-text);
+  background: var(--am-card);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 12px 50%;
+  outline: none;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.04);
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+.sb-league-filter-inmenu .sb-league-filter::placeholder{ color: var(--am-muted); }
+.sb-league-filter-inmenu .sb-league-filter:hover{ border-color: var(--am-muted); background: var(--am-bg); }
+.sb-league-filter-inmenu .sb-league-filter:focus{
+  border-color: var(--am-brand);
+  box-shadow: 0 0 0 3px rgba(245,158,11,.18), inset 0 1px 2px rgba(0,0,0,.04);
+}
+
+.sb-filter-tier-group{ margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--am-line); }
+.sb-filter-tier-group:first-of-type{ margin-top: 0; padding-top: 0; border-top: 0; }
+.sb-filter-tier-title{
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  color: var(--am-muted);
+  text-transform: uppercase;
+  padding: 6px 12px 4px;
+  margin: 0 8px 0 6px;
+  border-left: 3px solid var(--am-brand);
+  background: linear-gradient(90deg, var(--am-brand-tint) 0%, transparent 70%);
+  border-radius: 0 var(--am-radius-sm) var(--am-radius-sm) 0;
+}
+
 /* Buttons */
 .btn{
   background: transparent;
@@ -452,6 +526,15 @@
 .btn:disabled{
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Same active style as dashboard .sb-list button.active — Today / 7d / 30d (theme color) */
+.btn.active,
+.all-presets .btn.active{
+  background: var(--brand-tint-strong, rgba(245,158,11,0.12));
+  border-color: var(--brand, #f59e0b);
+  color: var(--brand, #f59e0b);
+  font-weight: 600;
 }
 
 /* Toggle switch */
@@ -498,20 +581,6 @@
 
 .sb-switch input:checked + .sb-switch-ui::after{
   transform: translate(18px, -50%);
-}
-
-/* Blocker for content scrolling under top nav */
-.sb-main::before{
-  content: "";
-  position: fixed;
-  top: 0;
-  left: max(calc(50vw - 600px + 16px), 16px);
-  right: max(calc(50vw - 600px + 16px), 16px);
-  height: var(--am-shell-pad);
-  background: radial-gradient(circle at 10% 10%, #ffffff 0%, var(--am-bg) 55%, #fffbeb 100%);
-  backdrop-filter: blur(20px);
-  z-index: 9998;
-  pointer-events: none;
 }
 
 /* mobile */

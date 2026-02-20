@@ -12,85 +12,124 @@ public static class LeagueIconMap
         s = Regex.Replace(s, @"\s+", "-").Trim('-');
         return string.IsNullOrEmpty(s) ? "league" : s;
     }
+    // TheSportsDB league ids (idLeague) → icon path (match list, dashboard). Single source: TheSportsDB.
     private static readonly Dictionary<int, string> ByCompetitionId = new()
     {
-        [2001] = "images/leagues/UEFA_Champions_League.svg", // UEFA Champions League
-        [2021] = "images/leagues/premier-league.svg",
-        [2016] = "images/leagues/championship.svg",
-        [2003] = "images/leagues/eredivisie.svg",
-        [2017] = "images/leagues/primeira-liga.svg",
-        [2013] = "images/leagues/brasileirao.svg",
-        [2015] = "images/leagues/ligue1.svg",
-        [2002] = "images/leagues/bundesliga.svg",
-        [2014] = "images/leagues/laliga.svg",
-        [2019] = "images/leagues/serie-a.svg",
-        [2152] = "images/leagues/libertadores.svg",
+        [4328] = "images/leagues/premier-league.svg",        // English Premier League
+        [4329] = "images/leagues/EFL-championship.svg",    // English League Championship
+        [4330] = "images/leagues/scottish-premier-league.png", // Scottish Premier League
+        [4331] = "images/leagues/bundesliga.svg",           // German Bundesliga
+        [4332] = "images/leagues/serie-a.svg",              // Italian Serie A
+        [4334] = "images/leagues/ligue1.svg",               // French Ligue 1
+        [4335] = "images/leagues/laliga.svg",               // Spanish La Liga
+        [4337] = "images/leagues/eredivisie.svg",            // Dutch Eredivisie
+        [4346] = "images/leagues/Primeira_Liga_204_Logo.png", // Portuguese Primeira Liga
+        [4351] = "images/leagues/brasileirao.svg",           // Campeonato Brasileiro Série A
+        [4356] = "images/leagues/UEFA_Champions_League.svg",  // UEFA Champions League
+        [4358] = "images/leagues/uefa-europa-league.svg",   // UEFA Europa League
+        [4480] = "images/leagues/libertadores.svg",          // Copa Libertadores
     };
 
-    /// <summary>Exact or alias league name → icon path. Used for team profile "Competitions" (e.g. FA Cup, EFL Cup).</summary>
+    /// <summary>Exact or alias league name → icon path. Used for team profile "Competitions" (Sports DB names + football-data names).</summary>
     private static readonly Dictionary<string, string> ByLeagueName = new(StringComparer.OrdinalIgnoreCase)
     {
         // UEFA
         ["UEFA Champions League"] = "images/leagues/UEFA_Champions_League.svg",
         ["Champions League"] = "images/leagues/UEFA_Champions_League.svg",
-        ["UEFA Europa League"] = "images/leagues/uel.svg",
+        ["UEFA Europa League"] = "images/leagues/uefa-europa-league.svg",
         ["Europa League"] = "images/leagues/uel.svg",
-        ["UEFA Europa Conference League"] = "images/leagues/uecl.svg",
+        ["UEFA Europa Conference League"] = "images/leagues/uefa-europa-conference-league.svg",
         ["Europa Conference League"] = "images/leagues/uecl.svg",
         ["Conference League"] = "images/leagues/uecl.svg",
         ["UECL"] = "images/leagues/uecl.svg",
-        // England
+        // Sports DB league names (team profile)
+        ["Belgian Pro League"] = "images/leagues/bundesliga.svg",
+        ["Dutch Eredivisie"] = "images/leagues/dutch-eredivisie.svg",
+        ["English League Championship"] = "images/leagues/EFL-championship.svg",
         ["English Premier League"] = "images/leagues/premier-league.svg",
+        ["French Ligue 1"] = "images/leagues/french-ligue-1.svg",
+        ["German Bundesliga"] = "images/leagues/bundesliga.svg",
+        ["Greek Superleague Greece"] = "images/leagues/serie-a.svg",
+        ["Italian Serie A"] = "images/leagues/serie-a.svg",
+        ["Scottish Premier League"] = "images/leagues/scottish-premier-league.png",
+        ["Spanish La Liga"] = "images/leagues/spanish-la-liga.svg",
+        // Football-data / common names
         ["Premier League"] = "images/leagues/premier-league.svg",
-        ["Championship"] = "images/leagues/championship.svg",
-        ["EFL Championship"] = "images/leagues/championship.svg",
-        ["FA Cup"] = "images/leagues/premier-league.svg",
-        ["Emirates FA Cup"] = "images/leagues/premier-league.svg",
-        ["EFL Cup"] = "images/leagues/premier-league.svg",
-        ["Carabao Cup"] = "images/leagues/premier-league.svg",
-        ["League Cup"] = "images/leagues/premier-league.svg",
-        // Top 5 + others
-        ["Bundesliga"] = "images/leagues/bundesliga.svg",
-        ["La Liga"] = "images/leagues/laliga.svg",
+        ["Championship"] = "images/leagues/EFL-championship.svg",
+        ["EFL Championship"] = "images/leagues/EFL-championship.svg",
         ["Primera Division"] = "images/leagues/laliga.svg",
+        ["La Liga"] = "images/leagues/laliga.svg",
+        ["Bundesliga"] = "images/leagues/bundesliga.svg",
         ["Serie A"] = "images/leagues/serie-a.svg",
         ["Ligue 1"] = "images/leagues/ligue1.svg",
         ["Eredivisie"] = "images/leagues/eredivisie.svg",
-        ["Primeira Liga"] = "images/leagues/primeira-liga.svg",
+        ["Primeira Liga"] = "images/leagues/Primeira_Liga_204_Logo.png",
+        ["Campeonato Brasileiro Série A"] = "images/leagues/brasileirao.svg",
         ["Brasileirão"] = "images/leagues/brasileirao.svg",
         ["Brasileirao"] = "images/leagues/brasileirao.svg",
         ["Copa Libertadores"] = "images/leagues/libertadores.svg",
         ["Copa Sudamericana"] = "images/leagues/libertadores.svg",
+        // Cups (shared icon or Premier League)
+        ["FA Cup"] = "images/leagues/FA_Cup_logo_(2020).svg",
+        ["Emirates FA Cup"] = "images/leagues/FA_Cup_logo_(2020).svg",
+        ["EFL Cup"] = "images/leagues/premier-league.svg",
+        ["Carabao Cup"] = "images/leagues/premier-league.svg",
+        ["League Cup"] = "images/leagues/premier-league.svg",
+        // International (use world-cup placeholder when no specific icon)
+        ["FIFA World Cup"] = DefaultLeagueIcon,
+        ["UEFA European Championships"] = "images/leagues/uefa-europa-league.svg",
+        ["UEFA Nations League"] = DefaultLeagueIcon,
+        ["International Friendlies"] = DefaultLeagueIcon,
+        ["World Cup Qualifying UEFA"] = DefaultLeagueIcon,
     };
 
     /// <summary>Keyword phrase → path when exact name not found (e.g. "FA Cup" inside "The FA Cup").</summary>
     private static readonly (string phrase, string path)[] NameContainsFallbacks =
     {
+        ("World Cup", DefaultLeagueIcon),
+        ("Nations League", DefaultLeagueIcon),
+        ("International Friendlies", DefaultLeagueIcon),
+        ("Qualifying UEFA", DefaultLeagueIcon),
         ("Champions League", "images/leagues/UEFA_Champions_League.svg"),
         ("Europa League", "images/leagues/uel.svg"),
         ("Conference League", "images/leagues/uecl.svg"),
         ("UECL", "images/leagues/uecl.svg"),
-        ("FA Cup", "images/leagues/premier-league.svg"),
+        ("FA Cup", "images/leagues/FA_Cup_logo_(2020).svg"),
         ("EFL Cup", "images/leagues/premier-league.svg"),
         ("Carabao Cup", "images/leagues/premier-league.svg"),
         ("League Cup", "images/leagues/premier-league.svg"),
         ("Premier League", "images/leagues/premier-league.svg"),
-        ("Championship", "images/leagues/championship.svg"),
+        ("Championship", "images/leagues/EFL-championship.svg"),
         ("Bundesliga", "images/leagues/bundesliga.svg"),
         ("La Liga", "images/leagues/laliga.svg"),
+        ("Primera Division", "images/leagues/laliga.svg"),
         ("Serie A", "images/leagues/serie-a.svg"),
         ("Ligue 1", "images/leagues/ligue1.svg"),
         ("Eredivisie", "images/leagues/eredivisie.svg"),
-        ("Primeira Liga", "images/leagues/primeira-liga.svg"),
+        ("Primeira Liga", "images/leagues/Primeira_Liga_204_Logo.png"),
         ("Libertadores", "images/leagues/libertadores.svg"),
         ("Sudamericana", "images/leagues/libertadores.svg"),
+        ("Belgian Pro League", "images/leagues/bundesliga.svg"),
+        ("Dutch Eredivisie", "images/leagues/dutch-eredivisie.svg"),
+        ("English League Championship", "images/leagues/EFL-championship.svg"),
+        ("English Premier League", "images/leagues/premier-league.svg"),
+        ("French Ligue 1", "images/leagues/french-ligue-1.svg"),
+        ("German Bundesliga", "images/leagues/bundesliga.svg"),
+        ("Greek Superleague", "images/leagues/serie-a.svg"),
+        ("Italian Serie A", "images/leagues/serie-a.svg"),
+        ("Scottish Premier League", "images/leagues/scottish-premier-league.png"),
+        ("Spanish La Liga", "images/leagues/spanish-la-liga.svg"),
+        ("Campeonato Brasileiro", "images/leagues/brasileirao.svg"),
     };
+
+    /// <summary>Default icon when no league badge is found (dashboard, match list).</summary>
+    public const string DefaultLeagueIcon = "images/icons/world-cup.png";
 
     public static string Get(int competitionId, string? name = null)
     {
         if (ByCompetitionId.TryGetValue(competitionId, out var path))
             return path;
-        return "images/leagues/ball.svg";
+        return DefaultLeagueIcon;
     }
 
     /// <summary>Resolve icon path from league/competition name (e.g. team profile "FA Cup", "EFL Cup"). Exact match first, then contains-phrase.</summary>
@@ -108,7 +147,6 @@ public static class LeagueIconMap
                 return p;
         }
 
-        // Fallback: path used by scripts/FetchLeagueIcons (Wikipedia). If you run that script for a league, the icon works without adding a map entry.
-        return "images/leagues/" + ToSafeFileName(trimmed) + ".png";
+        return DefaultLeagueIcon;
     }
 }

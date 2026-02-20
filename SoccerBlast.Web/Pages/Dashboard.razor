@@ -71,32 +71,44 @@
         <div class="sb-left">
         <div class="sb-card sb-left-card">
             <div class="sb-section-title">Football Leagues</div>
-
+            <div class="sb-league-filter-wrap" @onclick:stopPropagation="true">
+                <input type="text"
+                       class="sb-league-filter"
+                       placeholder="Find league…"
+                       value="@_leagueFilter"
+                       @oninput="OnLeagueFilterInput" />
+            </div>
             <div class="sb-left-scroll">
             <div class="sb-list">
                 <button class="@(_selectedCompetitionId == -1 ? "active" : "")"
                         @onclick="() => SelectCompetition(-1)">
                 <span class="league-row">
-                    <img class="league-ic-img" src="images/leagues/ball.png" alt="All" />
+                    <img class="league-ic-img" src="images/icons/football-pitch.png" alt="All" />
                     <span>All</span>
                 </span>
                 <span class="league-meta">@_matches.Count</span>
                 </button>
 
-                @foreach (var l in _leagues)
+                @foreach (var group in LeagueTierService.GroupByTier(FilteredLeagues()))
                 {
-                <button class="@(l.CompetitionId == _selectedCompetitionId ? "active" : "")"
-                        @onclick="() => SelectCompetition(l.CompetitionId)">
-                    <span class="league-row">
-                    <img class="league-ic-img" src="@LeagueIconMap.Get(l.CompetitionId, l.Name)" alt="@l.Name" />
-                    <span>@l.Name</span>
-                    @if (l.LiveCount > 0)
+                <div class="sb-tier-group">
+                    <div class="sb-tier-title">@group.TierLabel</div>
+                    @foreach (var l in group.Leagues)
                     {
-                        <span class="badge-live">Live</span>
+                    <button class="@(l.CompetitionId == _selectedCompetitionId ? "active" : "")"
+                            @onclick="() => SelectCompetition(l.CompetitionId)">
+                        <span class="league-row">
+                        <img class="league-ic-img" src="@(l.BadgeUrl ?? LeagueIconMap.Get(l.CompetitionId, l.Name))" alt="@l.Name" />
+                        <span>@l.Name</span>
+                        @if (l.LiveCount > 0)
+                        {
+                            <span class="badge-live">Live</span>
+                        }
+                        </span>
+                        <span class="league-meta">@l.MatchCount</span>
+                    </button>
                     }
-                    </span>
-                    <span class="league-meta">@l.MatchCount</span>
-                </button>
+                </div>
                 }
             </div>
             </div>
@@ -314,8 +326,26 @@
   private List<SearchResultDto> _results = new();
   private CancellationTokenSource? _searchCts;
 
+  // league sidebar filter (small find-league input)
+  private string _leagueFilter = "";
+
   private void OpenSearch() => _showSearch = true;
   private void CloseSearch() => _showSearch = false;
+
+  private void OnLeagueFilterInput(ChangeEventArgs e)
+  {
+    _leagueFilter = (e.Value?.ToString() ?? "").Trim();
+    StateHasChanged();
+  }
+
+  private List<LeagueDto> FilteredLeagues()
+  {
+    if (string.IsNullOrWhiteSpace(_leagueFilter))
+      return _leagues;
+    return _leagues
+      .Where(l => (l.Name ?? "").Contains(_leagueFilter, StringComparison.OrdinalIgnoreCase))
+      .ToList();
+  }
 
   // like/unlike team
   private bool IsLikedTeam(int teamId) 
@@ -561,12 +591,25 @@
 
     // Immediately show whatever is already in DB (fast)
     _loading = true;
+    _toast = null;
     StateHasChanged();
 
-    _matches = await Api.GetByLocalDateAsync(d);
-    _leagues = BuildLeagues(_matches);
-    _matchesUpdatedLocal = ConvertUtcToLocal(DateTime.UtcNow);
-    _loading = false;
+    try
+    {
+      _matches = await Api.GetByLocalDateAsync(d) ?? new();
+      _leagues = BuildLeagues(_matches);
+      _matchesUpdatedLocal = ConvertUtcToLocal(DateTime.UtcNow);
+    }
+    catch (Exception ex)
+    {
+      _matches = new();
+      _leagues = new();
+      _toast = $"Could not load matches: {ex.Message}";
+    }
+    finally
+    {
+      _loading = false;
+    }
     StateHasChanged();
 
     // Load news in parallel (don’t block UI)
@@ -584,24 +627,27 @@
         catch { /* ignore */ }
     });
 
-    // Sync in background, then refresh matches (UI keeps showing old content)
+    // Sync in background, then refresh matches
     try
     {
         var synced = await Api.SyncByLocalDateAsync(d);
-        _toast = synced > 0 ? $"Updated {synced} matches." : null;
-
-        var fresh = await Api.GetByLocalDateAsync(d);
-        await InvokeAsync(() =>
+        if (synced > 0)
         {
-            _matches = fresh;
-            _matchesUpdatedLocal = ConvertUtcToLocal(DateTime.UtcNow);
-            _leagues = BuildLeagues(_matches);
-            StateHasChanged();
-        });
+            _toast = $"Updated {synced} matches.";
+            var fresh = await Api.GetByLocalDateAsync(d) ?? new();
+            await InvokeAsync(() =>
+            {
+                _matches = fresh;
+                _matchesUpdatedLocal = ConvertUtcToLocal(DateTime.UtcNow);
+                _leagues = BuildLeagues(_matches);
+                StateHasChanged();
+            });
+        }
     }
     catch (Exception ex)
     {
         _toast = $"Sync failed: {ex.Message}";
+        await InvokeAsync(StateHasChanged);
     }
   }
 
@@ -650,22 +696,34 @@
     return local.ToString("HH:mm");
   }
 
-  private static Dictionary<string, List<MatchDto>> GroupByCompetition(List<MatchDto> matches)
+  private static IReadOnlyList<KeyValuePair<string, List<MatchDto>>> GroupByCompetition(List<MatchDto> matches)
   {
+    var tierOrder = new[]
+    {
+      LeagueTierService.InternationalNational,
+      LeagueTierService.ContinentalClub,
+      LeagueTierService.DomesticTop,
+      LeagueTierService.DomesticCups,
+      LeagueTierService.InternationalClub,
+      LeagueTierService.OtherRegional
+    };
     return matches
       .GroupBy(m => m.CompetitionName ?? "Other")
-      .OrderBy(g => g.Key)
-      .ToDictionary(g => g.Key, g => g.ToList());
+      .OrderBy(g => Array.IndexOf(tierOrder, LeagueTierService.GetTier(g.Key)))
+      .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+      .Select(g => new KeyValuePair<string, List<MatchDto>>(g.Key, g.ToList()))
+      .ToList();
   }
 
   private static List<LeagueDto> BuildLeagues(List<MatchDto> matches)
   {
     return matches
-        .GroupBy(m => new { m.CompetitionId, m.CompetitionName })
+        .GroupBy(m => new { m.CompetitionId, m.CompetitionName, m.CompetitionBadgeUrl })
         .Select(g => new LeagueDto
         {
             CompetitionId = g.Key.CompetitionId,
             Name = g.Key.CompetitionName ?? "Other",
+            BadgeUrl = g.Key.CompetitionBadgeUrl,
             MatchCount = g.Count(),
             LiveCount = g.Count(x => MatchDisplayHelper.IsLiveStatus(x.Status))
         })

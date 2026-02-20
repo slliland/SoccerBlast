@@ -1,0 +1,114 @@
+@page "/venue/{Id}"
+@rendermode RenderMode.InteractiveServer
+@using Microsoft.AspNetCore.Components.Web
+@using SoccerBlast.Shared.Contracts
+@inject SoccerBlast.Web.Services.SoccerApiClient Api
+@inject NavigationManager Nav
+@inject IJSRuntime JSRuntime
+
+<div class="team-page">
+  @if (_loading)
+  {
+    <div class="team-loading">
+      <GlobalSpinner Message="Loading venue..." FullPage="true" />
+    </div>
+  }
+  else if (_venue is null)
+  {
+    <div class="team-error">
+      <p>Venue not found.</p>
+      <button class="team-back-btn" @onclick="GoBack" type="button">← Back</button>
+    </div>
+  }
+  else
+  {
+    <div class="team-hero venue-hero" style="background-image: url('@(_venue.ImageUrl ?? "images/teams/stadium-cenit-view-.png")')">
+      <div class="team-hero-overlay"></div>
+      <div class="team-hero-content">
+        <button class="team-back-btn" @onclick="GoBack" type="button">Back</button>
+
+        <div class="team-hero-info">
+          <h1 class="team-hero-name">@_venue.Name</h1>
+          @if (!string.IsNullOrWhiteSpace(_venue.City) || !string.IsNullOrWhiteSpace(_venue.Country))
+          {
+            <p class="team-hero-leagues">@string.Join(", ", new[]{_venue.City, _venue.Country}.Where(s => !string.IsNullOrWhiteSpace(s)))</p>
+          }
+        </div>
+      </div>
+    </div>
+
+    <div class="team-layout">
+      <div class="team-content">
+        <div class="team-tab-content">
+          <div class="team-section-block">
+            <h3 class="team-block-title">Venue Details</h3>
+            <div class="team-info-row">
+              @if (!string.IsNullOrWhiteSpace(_venue.City))
+              {
+                <div class="team-info-item">
+                  <span class="team-info-label">City</span>
+                  <span class="team-info-value">@_venue.City</span>
+                </div>
+              }
+              @if (!string.IsNullOrWhiteSpace(_venue.Country))
+              {
+                <div class="team-info-item">
+                  <span class="team-info-label">Country</span>
+                  <span class="team-info-value">@_venue.Country</span>
+                </div>
+              }
+              @if (_venue.Capacity.HasValue)
+              {
+                <div class="team-info-item">
+                  <span class="team-info-label">Capacity</span>
+                  <span class="team-info-value">@_venue.Capacity.Value.ToString("N0")</span>
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+</div>
+
+@code {
+  [Parameter] public string? Id { get; set; }
+
+  private bool _loading = true;
+  private VenueDetailDto? _venue;
+
+  protected override async Task OnParametersSetAsync()
+  {
+    _loading = true;
+    _venue = null;
+
+    try
+    {
+      if (string.IsNullOrWhiteSpace(Id)) return;
+      using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+      _venue = await Api.GetVenueAsync(Id!, cts.Token);
+    }
+    catch
+    {
+      _venue = null;
+    }
+    finally
+    {
+      _loading = false;
+    }
+  }
+
+  private async Task GoBack()
+  {
+    try
+    {
+      await JSRuntime.InvokeVoidAsync("soccerBlastBack");
+    }
+    catch
+    {
+      Nav.NavigateTo("/", forceLoad: false);
+    }
+  }
+}
+

@@ -1,4 +1,4 @@
-@page "/team/{Id:int}"
+@page "/team/{Id}"
 @using Microsoft.AspNetCore.Components.Web
 @rendermode RenderMode.InteractiveServer
 @using SoccerBlast.Shared.Contracts
@@ -25,7 +25,7 @@
   else
   {
     <!-- Hero Section with Banner -->
-    <div class="team-hero" style="background-image: url('@(_team.Profile?.BannerUrl ?? "images/news/placeholder.png")')">
+    <div class="team-hero" style="background-image: url('@(string.IsNullOrWhiteSpace(_team.Profile?.BannerUrl) ? "images/teams/team-banner.jpg" : _team.Profile.BannerUrl)')">
       <div class="team-hero-overlay"></div>
       <div class="team-hero-content">
         <button class="team-back-btn" @onclick="GoBack">Back</button>
@@ -73,6 +73,10 @@
         <button class="team-tab @(_activeTab == "about" ? "active" : "")" @onclick='() => _activeTab = "about"'>
           <img src="/images/teams/about.png" alt="About" class="team-tab-icon" />
           <span>About</span>
+        </button>
+        <button class="team-tab @(_activeTab == "matches" ? "active" : "")" @onclick="@(() => LoadMatchesTab())">
+            <img src="/images/teams/tickets.png" alt="Matches" class="team-tab-icon" />
+            <span>Matches</span>
         </button>
         <button class="team-tab @(_activeTab == "kit" ? "active" : "")" @onclick='() => _activeTab = "kit"'>
           <img src="/images/teams/media.png" alt="Club Hub" class="team-tab-icon" />
@@ -123,16 +127,24 @@
               <div class="team-section-block">
                 <h3 class="team-block-title">Competitions</h3>
                 <div class="team-leagues-grid">
-                  @foreach (var league in _team.Profile.Leagues.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                  @{
+                    var leagueEntries = _team.Profile.LeaguesWithBadges ?? _team.Profile.Leagues
+                      .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                      .Select(s => new LeagueEntryDto(s.Trim(), null))
+                      .Where(e => !string.IsNullOrEmpty(e.Name))
+                      .ToList();
+                  }
+                  @foreach (var entry in leagueEntries)
                   {
-                    var leagueName = league.Trim();
-                    var iconPath = LeagueIconMap.GetByName(leagueName);
+                    var iconPath = entry.BadgeUrl ?? LeagueIconMap.GetByName(entry.Name) ?? LeagueIconMap.DefaultLeagueIcon;
                     <div class="team-league-item">
-                      @if (!string.IsNullOrEmpty(iconPath))
-                      {
-                        <img src="@iconPath" alt="@leagueName" class="team-league-icon" />
-                      }
-                      <span class="team-league-name">@leagueName</span>
+                      <img src="@iconPath"
+                           alt="@entry.Name"
+                           class="team-league-icon"
+                           loading="lazy"
+                           referrerpolicy="no-referrer"
+                           onerror="this.onerror=null; this.src='/images/icons/world-cup.png';" />
+                      <span class="team-league-name">@entry.Name</span>
                     </div>
                   }
                 </div>
@@ -185,10 +197,44 @@
             }
           </div>
         }
-        else if (_activeTab == "kit")
+        else if (_activeTab == "matches")
         {
-          <!-- Team Kit & Social -->
           <div class="team-tab-content">
+            <TeamMatchesTab
+              IsActive="@(_activeTab == "matches")"
+              TeamName="@(_team?.Name ?? "")"
+              TeamId="@(_team?.Id)" 
+              IsExternalTeam="@IsExternalTeam"
+              SportsDbTeamId="@_team?.SportsDbTeamId"
+              From="@_matchesFrom"
+              To="@_matchesTo"
+              RangeChanged="OnMatchRangeChanged" />
+          </div>
+        }
+
+                else if (_activeTab == "kit")
+        {
+          <!-- Team Kit, Fanart (v2), Social -->
+          <div class="team-tab-content">
+            @if (_team.Profile.FanartUrls != null && _team.Profile.FanartUrls.Count > 0)
+            {
+              <div class="team-section-block">
+                <h3 class="team-block-title">Gallery</h3>
+                <div class="team-fanart-grid">
+                  @for (var i = 0; i < _team.Profile.FanartUrls.Count; i++)
+                  {
+                    var url = _team.Profile.FanartUrls[i];
+                    <img src="@url"
+                         alt="@_team.Name gallery image"
+                         class="team-fanart-img"
+                         loading="lazy"
+                         referrerpolicy="no-referrer"
+                         onerror="this.style.display='none';"
+                         @onclick="() => OpenGallery(i)" />
+                  }
+                </div>
+              </div>
+            }
             @if (!string.IsNullOrWhiteSpace(_team.Profile.JerseyUrl))
             {
               <div class="team-section-block">
@@ -215,23 +261,33 @@
                 <div class="team-social-links">
                   @if (!string.IsNullOrWhiteSpace(_team.Profile.Website))
                   {
-                    <a href="@_team.Profile.Website" target="_blank" rel="noopener noreferrer" class="team-social-link">Website</a>
+                    <a href="@_team.Profile.Website" target="_blank" rel="noopener noreferrer" class="team-social-link">
+                      <span>Website</span>
+                    </a>
                   }
                   @if (!string.IsNullOrWhiteSpace(_team.Profile.Twitter))
                   {
-                    <a href="@_team.Profile.Twitter" target="_blank" rel="noopener noreferrer" class="team-social-link">Twitter</a>
+                    <a href="@_team.Profile.Twitter" target="_blank" rel="noopener noreferrer" class="team-social-link team-social-link-icon" aria-label="Twitter">
+                      <img src="/images/teams/media/twitter.png" alt="Twitter" class="team-social-icon" />
+                    </a>
                   }
                   @if (!string.IsNullOrWhiteSpace(_team.Profile.Facebook))
                   {
-                    <a href="@_team.Profile.Facebook" target="_blank" rel="noopener noreferrer" class="team-social-link">Facebook</a>
+                    <a href="@_team.Profile.Facebook" target="_blank" rel="noopener noreferrer" class="team-social-link team-social-link-icon" aria-label="Facebook">
+                      <img src="/images/teams/media/facebook.png" alt="Facebook" class="team-social-icon" />
+                    </a>
                   }
                   @if (!string.IsNullOrWhiteSpace(_team.Profile.Instagram))
                   {
-                    <a href="@_team.Profile.Instagram" target="_blank" rel="noopener noreferrer" class="team-social-link">Instagram</a>
+                    <a href="@_team.Profile.Instagram" target="_blank" rel="noopener noreferrer" class="team-social-link team-social-link-icon" aria-label="Instagram">
+                      <img src="/images/teams/media/instagram.png" alt="Instagram" class="team-social-icon" />
+                    </a>
                   }
                   @if (!string.IsNullOrWhiteSpace(_team.Profile.Youtube))
                   {
-                    <a href="@_team.Profile.Youtube" target="_blank" rel="noopener noreferrer" class="team-social-link">YouTube</a>
+                    <a href="@_team.Profile.Youtube" target="_blank" rel="noopener noreferrer" class="team-social-link team-social-link-icon" aria-label="YouTube">
+                      <img src="/images/teams/media/youtube.png" alt="YouTube" class="team-social-icon" />
+                    </a>
                   }
                 </div>
               </div>
@@ -250,29 +306,38 @@
             }
             else if (_players != null && _players.Count > 0)
             {
-              <div class="team-players-grid">
-                @foreach (var player in _players)
-                {
-                  <div class="team-player-card">
-                    <img src="@(player.ThumbUrl ?? "/images/teams/placeholder.png")" 
-                         alt="@player.Name" 
-                         class="team-player-photo"
-                         loading="lazy"
-                         referrerpolicy="no-referrer"
-                         onerror="this.src='/images/teams/placeholder.png';" />
-                    <div class="team-player-info">
-                      <h4 class="team-player-name">@player.Name</h4>
-                      <div class="team-player-details">
-                        <span class="team-player-position">@player.Position</span>
-                        @if (!string.IsNullOrEmpty(player.Nationality))
-                        {
-                          <span class="team-player-nationality">@player.Nationality</span>
-                        }
+              var byPosition = _players
+                .GroupBy(p => string.IsNullOrWhiteSpace(p.Position) ? "Other" : (p.Position ?? "Other").Trim())
+                .OrderBy(g => PositionSortOrder(g.Key))
+                .ToList();
+              @foreach (var group in byPosition)
+              {
+                <div class="team-players-by-position">
+                  <h3 class="team-players-position-title">@group.Key</h3>
+                  <div class="team-players-grid">
+                    @foreach (var player in group)
+                    {
+                      <div class="team-player-card">
+                        <img src="@(player.ThumbUrl ?? "/images/icons/soccer-player.png")" 
+                             alt="@player.Name" 
+                             class="team-player-photo"
+                             loading="lazy"
+                             referrerpolicy="no-referrer"
+                             onerror="this.src='/images/icons/soccer-player.png';" />
+                        <div class="team-player-info">
+                          <h4 class="team-player-name">@player.Name</h4>
+                          <div class="team-player-details">
+                            @if (!string.IsNullOrEmpty(player.Nationality))
+                            {
+                              <span class="team-player-nationality">@player.Nationality</span>
+                            }
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    }
                   </div>
-                }
-              </div>
+                </div>
+              }
             }
             else
             {
@@ -287,28 +352,51 @@
       else
       {
         <div class="team-tab-content">
-          <div class="team-empty">
-            @if (_profileUnavailable)
-            {
+          @if (_profileUnavailable)
+          {
+            <div class="team-empty">
               <h3>Profile not available</h3>
               <p class="small-muted">No extended profile for this team in the current source.</p>
-            }
-            else
-            {
-              <div class="team-empty-icon">⏳</div>
-              <h3>Loading team profile...</h3>
-              <p class="small-muted">Fetching stadium, description, and media</p>
-            }
-          </div>
+            </div>
+          }
+          else
+          {
+            <div class="team-empty team-empty-loading">
+              <GlobalSpinner Message="Loading team profile..." />
+              @if (_team?.Id > 0)
+              {
+                <button type="button" class="team-sync-btn" @onclick="SyncProfileInBackground" disabled="@_syncing">
+                  @(_syncing ? "Syncing…" : "Sync profile now")
+                </button>
+              }
+            </div>
+          }
         </div>
       }
+      </div>
+    </div>
+  }
+
+  @if (_isGalleryOpen && _team?.Profile?.FanartUrls?.Count > 0)
+  {
+    <div class="team-gallery-overlay" @onclick="CloseGallery">
+      <div class="team-gallery-modal" @onclick:stopPropagation="true">
+        <button type="button" class="team-gallery-close" @onclick="CloseGallery" aria-label="Close gallery">×</button>
+        <button type="button" class="team-gallery-nav team-gallery-nav-prev" @onclick="PrevGalleryImage" aria-label="Previous image">‹</button>
+        <img src="@_team.Profile.FanartUrls[_activeGalleryIndex]"
+             alt="@_team.Name gallery image"
+             class="team-gallery-img"
+             loading="lazy"
+             referrerpolicy="no-referrer"
+             onerror="this.style.display='none';" />
+        <button type="button" class="team-gallery-nav team-gallery-nav-next" @onclick="NextGalleryImage" aria-label="Next image">›</button>
       </div>
     </div>
   }
 </div>
 
 @code {
-  [Parameter] public int Id { get; set; }
+  [Parameter] public string? Id { get; set; }
 
   private bool _loading = true;
   private bool _syncing;
@@ -321,6 +409,14 @@
 
   private bool _loadingPlayers = false;
   private List<TeamPlayerDto>? _players;
+
+  private bool _isGalleryOpen;
+  private int _activeGalleryIndex;
+
+  private bool IsExternalTeam => _team?.Id == 0;
+
+  private DateOnly _matchesFrom = DateOnly.FromDateTime(DateTime.Today.AddDays(-30));
+  private DateOnly _matchesTo   = DateOnly.FromDateTime(DateTime.Today.AddDays(30));
 
   private async Task GoBack()
   {
@@ -342,15 +438,13 @@
 
     try
     {
+      if (string.IsNullOrWhiteSpace(Id)) return;
       using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-      _team = await Api.GetTeamAsync(Id, cts.Token);
-      
-      if (_team != null)
+      _team = await Api.GetTeamAsync(Id!, cts.Token);
+      if (_team != null && _team.Id != 0)
       {
         StartAutoSync();
-        // Sync immediately if profile missing (don't wait for first 60s tick)
-        if (_team.Profile == null || string.IsNullOrWhiteSpace(_team.SportsDbTeamId))
-          _ = InvokeAsync(SyncProfileInBackground);
+        _ = InvokeAsync(SyncProfileInBackground);
       }
     }
     catch (OperationCanceledException)
@@ -389,14 +483,14 @@
 
   private async Task SyncProfileInBackground()
   {
-    if (_syncing || _profileUnavailable) return;
+    if (_syncing || _profileUnavailable || IsExternalTeam || _team?.Id == 0) return;
     if (DateTime.UtcNow - _lastSyncAttemptUtc < TimeSpan.FromMinutes(5)) return;
     _lastSyncAttemptUtc = DateTime.UtcNow;
     _syncing = true;
 
     try
     {
-      var (ok, message) = await Api.SyncTeamProfileAsync(Id);
+      var (ok, message) = await Api.SyncTeamProfileAsync(_team!.Id);
 
       if (!ok && (message.Contains("No SportsDB match", StringComparison.OrdinalIgnoreCase) || message.Contains("not found", StringComparison.OrdinalIgnoreCase)))
       {
@@ -405,7 +499,7 @@
       }
 
       // Reload team (profile may now be populated, or still null)
-      _team = await Api.GetTeamAsync(Id);
+      _team = await Api.GetTeamAsync(Id!);
 
       if (!ok && !_profileUnavailable)
         _toast = message.Length > 60 ? message.Substring(0, 57) + "..." : message;
@@ -428,13 +522,15 @@
   {
     _activeTab = "players";
     
-    if (_players != null || _loadingPlayers || string.IsNullOrEmpty(_team?.SportsDbTeamId))
-      return;
+    if (_players != null || _loadingPlayers || _team == null) return;
 
     _loadingPlayers = true;
     try
     {
-      _players = await Api.GetTeamPlayersAsync(Id);
+      if (IsExternalTeam && !string.IsNullOrEmpty(_team?.SportsDbTeamId))
+        _players = await Api.GetTeamPlayersByExternalIdAsync(_team.SportsDbTeamId!);
+      else if (_team?.Id > 0)
+        _players = await Api.GetTeamPlayersAsync(_team.Id);
     }
     catch (Exception ex)
     {
@@ -445,6 +541,60 @@
       _loadingPlayers = false;
       await InvokeAsync(StateHasChanged);
     }
+  }
+
+  private void OpenGallery(int index)
+  {
+    if (_team?.Profile?.FanartUrls == null || _team.Profile.FanartUrls.Count == 0)
+      return;
+
+    _activeGalleryIndex = Math.Clamp(index, 0, _team.Profile.FanartUrls.Count - 1);
+    _isGalleryOpen = true;
+  }
+
+  private void CloseGallery()
+  {
+    _isGalleryOpen = false;
+  }
+
+  private void NextGalleryImage()
+  {
+    if (_team?.Profile?.FanartUrls == null || _team.Profile.FanartUrls.Count == 0)
+      return;
+
+    _activeGalleryIndex = (_activeGalleryIndex + 1) % _team.Profile.FanartUrls.Count;
+  }
+
+  private void PrevGalleryImage()
+  {
+    if (_team?.Profile?.FanartUrls == null || _team.Profile.FanartUrls.Count == 0)
+      return;
+
+    _activeGalleryIndex = (_activeGalleryIndex - 1 + _team.Profile.FanartUrls.Count) % _team.Profile.FanartUrls.Count;
+  }
+
+  // player grouped by position
+  private static int PositionSortOrder(string position)
+  {
+    var key = position.ToLowerInvariant();
+    if (key.Contains("goalkeeper") || key == "goalkeeper") return 0;
+    if (key.Contains("defen")) return 1;
+    if (key.Contains("midfield")) return 2;
+    if (key.Contains("forward") || key.Contains("striker") || key.Contains("attack")) return 3;
+    if (key == "other") return 99;
+    return 10; // other named positions (e.g. Left Winger) after main four
+  }
+
+  private void LoadMatchesTab()
+  {
+    _activeTab = "matches";
+  }
+
+  private Task OnMatchRangeChanged((DateOnly From, DateOnly To) r)
+  {
+    _matchesFrom = r.From;
+    _matchesTo = r.To;
+    return Task.CompletedTask;
   }
 
   public void Dispose()

@@ -1,0 +1,123 @@
+@page "/player/{Id}"
+@rendermode RenderMode.InteractiveServer
+@using Microsoft.AspNetCore.Components.Web
+@using SoccerBlast.Shared.Contracts
+@inject SoccerBlast.Web.Services.SoccerApiClient Api
+@inject NavigationManager Nav
+@inject IJSRuntime JSRuntime
+
+<div class="team-page">
+  @if (_loading)
+  {
+    <div class="team-loading">
+      <GlobalSpinner Message="Loading player..." FullPage="true" />
+    </div>
+  }
+  else if (_player is null)
+  {
+    <div class="team-error">
+      <p>Player not found.</p>
+      <button class="team-back-btn" @onclick="GoBack" type="button">← Back</button>
+    </div>
+  }
+  else
+  {
+    <div class="team-hero player-hero">
+      <div class="team-hero-overlay"></div>
+      <div class="team-hero-content">
+        <button class="team-back-btn" @onclick="GoBack" type="button">Back</button>
+
+        <div class="team-hero-info player-hero-info">
+          <img class="player-hero-photo"
+               src="@(_player.PhotoUrl ?? "/images/icons/soccer-player.png")"
+               alt="@_player.Name"
+               loading="lazy"
+               referrerpolicy="no-referrer"
+               onerror="this.onerror=null; this.src='/images/icons/soccer-player.png';" />
+
+          <div>
+            <h1 class="team-hero-name">@_player.Name</h1>
+            <div class="player-hero-meta">
+              @if (!string.IsNullOrWhiteSpace(_player.Position))
+              {
+                <span class="player-pill">@_player.Position</span>
+              }
+              @if (!string.IsNullOrWhiteSpace(_player.Nationality))
+              {
+                <span class="player-pill">@_player.Nationality</span>
+              }
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="team-layout">
+      <div class="team-content">
+        <div class="team-tab-content">
+          <div class="team-section-block">
+            <h3 class="team-block-title">Profile</h3>
+            <div class="team-info-row">
+              @if (_player.DateOfBirth != null)
+              {
+                <div class="team-info-item">
+                  <span class="team-info-label">Born</span>
+                  <span class="team-info-value">@_player.DateOfBirth.Value.ToString("yyyy-MM-dd")</span>
+                </div>
+              }
+
+              @if (!string.IsNullOrWhiteSpace(_player.CurrentTeamName))
+              {
+                <div class="team-info-item">
+                  <span class="team-info-label">Current Team</span>
+                  <span class="team-info-value">@_player.CurrentTeamName</span>
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+</div>
+
+@code {
+  [Parameter] public string? Id { get; set; }
+
+  private bool _loading = true;
+  private PlayerDetailDto? _player;
+
+  protected override async Task OnParametersSetAsync()
+  {
+    _loading = true;
+    _player = null;
+
+    try
+    {
+      if (string.IsNullOrWhiteSpace(Id)) return;
+      using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+      _player = await Api.GetPlayerAsync(Id!, cts.Token);
+    }
+    catch
+    {
+      _player = null;
+    }
+    finally
+    {
+      _loading = false;
+    }
+  }
+
+  private async Task GoBack()
+  {
+    try
+    {
+      await JSRuntime.InvokeVoidAsync("soccerBlastBack");
+    }
+    catch
+    {
+      Nav.NavigateTo("/", forceLoad: false);
+    }
+  }
+}
+

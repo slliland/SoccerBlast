@@ -11,7 +11,7 @@
 @inject NavigationManager Nav
 @implements IDisposable
 
-<div class="sb-page" @onclick="CloseOverlays">
+<div class="sb-page all-page" @onclick="CloseOverlays">
   <div class="sb-shell">
 
     <!-- TOP BAR -->
@@ -71,7 +71,7 @@
     </div>
 
     <!-- BODY -->
-    <div class="sb-card sb-main" style="margin-top:12px;">
+    <div class="sb-card sb-main">
 
       <div class="section-head">
         <div class="all-header">
@@ -95,9 +95,9 @@
             </div>
 
             <div class="all-presets">
-              <button class="btn btn-sm" @onclick="SetToday">Today</button>
-              <button class="btn btn-sm" @onclick="Set7Days">7d</button>
-              <button class="btn btn-sm" @onclick="Set30Days">30d</button>
+              <button class="btn btn-sm @(PresetKind() == "today" ? "active" : "")" @onclick="SetToday">Today</button>
+              <button class="btn btn-sm @(PresetKind() == "7d" ? "active" : "")" @onclick="Set7Days">7d</button>
+              <button class="btn btn-sm @(PresetKind() == "30d" ? "active" : "")" @onclick="Set30Days">30d</button>
             </div>
           </div>
 
@@ -114,17 +114,30 @@
 
                 @if (_showLeagueDropdown)
                 {
-                  <div class="sb-filter-menu">
+                  <div class="sb-filter-menu sb-filter-menu-tiered">
+                    <div class="sb-league-filter-inmenu" @onclick:stopPropagation="true">
+                      <input type="text"
+                             class="sb-league-filter"
+                             placeholder="Find league…"
+                             value="@_leagueFilter"
+                             @oninput="OnLeagueFilterInput" />
+                    </div>
                     <button class="sb-filter-option @(string.IsNullOrWhiteSpace(_selectedCompetitionName) ? "active" : "")"
                             @onclick='() => SelectLeague("")'>
                       All leagues (@VisibleMatchesRaw().Count)
                     </button>
-                    @foreach (var l in LeagueOptions())
+                    @foreach (var group in LeagueTierService.GroupOptionsByTier(FilteredLeagueOptions().Select(x => (x.Name, x.Count))))
                     {
-                      <button class="sb-filter-option @(_selectedCompetitionName == l.Name ? "active" : "")"
-                              @onclick="() => SelectLeague(l.Name)">
-                        @l.Name (@l.Count)
-                      </button>
+                      <div class="sb-filter-tier-group">
+                        <div class="sb-filter-tier-title">@group.TierLabel</div>
+                        @foreach (var l in group.Leagues)
+                        {
+                          <button class="sb-filter-option @(_selectedCompetitionName == l.Name ? "active" : "")"
+                                  @onclick="() => SelectLeague(l.Name)">
+                            @l.Name (@l.Count)
+                          </button>
+                        }
+                      </div>
                     }
                   </div>
                 }
@@ -293,11 +306,17 @@
   private string _selectedCompetitionName = ""; // "" = All
   private bool _showLeagueDropdown = false;
 
+  // reload
+  private CancellationTokenSource? _reloadCts;
+  private int _reloadSeq;
+  private TimeZoneInfo? _tz;
+
   protected override async Task OnAfterRenderAsync(bool firstRender)
   {
     if (!firstRender) return;
 
     _tzId = await Tz.GetTimeZoneIdAsync();
+    _tz = TimeZoneInfo.FindSystemTimeZoneById(_tzId);
     Api.SetTimeZone(_tzId);
 
     _prefs = await Prefs.GetAsync();
@@ -310,7 +329,7 @@
     _hydrated = true;
     StateHasChanged();
 
-    // Initial load
+    // Initial load: just read from DB; auto-sync loop will refresh in background
     await Reload();
 
     // Start auto-sync loop (60 seconds)
@@ -323,42 +342,33 @@
 
   private async Task AutoSyncTick()
   {
-    if (_syncing || !_hydrated) return;
+      if (_syncing || !_hydrated || !_autoSyncEnabled) return;
 
-    _syncing = true;
-    try
-    {
-      await InvokeAsync(StateHasChanged);
+      var from = _startDate;
+      var to = _endDate;
 
-      var daySpan = (_endDate.DayNumber - _startDate.DayNumber) + 1;
-
-      // Smart sync: if range > 7 days, only sync today + yesterday + tomorrow
-      int synced;
-      if (daySpan > 7)
+      _syncing = true;
+      try
       {
-        var today = DateOnly.FromDateTime(DateTime.Now);
-        var yesterday = today.AddDays(-1);
-        var tomorrow = today.AddDays(1);
-        
-        synced = await Api.SyncRangeAsync(yesterday, tomorrow);
-        Console.WriteLine($"[AutoSync] Large range ({daySpan}d), synced {synced} matches for {yesterday} to {tomorrow}");
-      }
-      else
-      {
-        synced = await Api.SyncRangeAsync(_startDate, _endDate);
-        Console.WriteLine($"[AutoSync] Small range ({daySpan}d), synced {synced} matches for full range");
-      }
+          await InvokeAsync(StateHasChanged);
 
-      if (synced > 0)
-      {
-        var rangeMatches = await Api.GetRangeAsync(_startDate, _endDate);
-        _items.Clear();
-        _items.AddRange(rangeMatches);
-        _updatedLocal = ConvertUtcToLocal(DateTime.UtcNow);
-        _toast = $"Auto-synced {synced} matches.";
-      }
+          var today = DateOnly.FromDateTime(DateTime.Now);
+          var hotStart = today.AddDays(-1);
+          var hotEnd = today.AddDays(1);
 
-      await InvokeAsync(StateHasChanged);
+          var ensured = await Api.EnsureRangeFreshAsync(hotStart, hotEnd, hotMin: 5, warmMin: 60, coldMin: 0);
+
+          if (ensured?.syncedMatches > 0)
+          {
+              var rangeMatches = await Api.GetRangeAsync(from, to);
+              var inRange = FilterByRequestedRange(rangeMatches, from, to);
+              _items.Clear();
+              _items.AddRange(inRange);
+              _updatedLocal = ConvertUtcToLocal(DateTime.UtcNow);
+              _toast = $"Auto-synced {ensured.syncedMatches} matches.";
+          }
+
+          await InvokeAsync(StateHasChanged);
     }
     catch (Exception ex)
     {
@@ -397,6 +407,8 @@
   public void Dispose()
   {
     _autoSyncLoop?.Dispose();
+    _reloadCts?.Cancel();
+    _reloadCts?.Dispose();
     _searchCts?.Cancel();
     _searchCts?.Dispose();
   }
@@ -520,49 +532,132 @@
     await Reload();
   }
 
+  /// <summary>Returns "today", "7d", "30d" if current range matches that preset; otherwise null.</summary>
+  private string? PresetKind()
+  {
+    var today = DateOnly.FromDateTime(DateTime.Now);
+    var days = (_endDate.DayNumber - _startDate.DayNumber) + 1;
+    if (_startDate == today && _endDate == today) return "today";
+    if (days == 7 && _endDate == today) return "7d";
+    if (days == 30 && _endDate == today) return "30d";
+    return null;
+  }
+
+  /// <summary>Filter matches to those whose local date (in user TZ) falls within [from, to].</summary>
+  private List<MatchDto> FilterByRequestedRange(List<MatchDto> matches, DateOnly from, DateOnly to)
+  {
+    return matches.Where(m =>
+    {
+      var local = ConvertUtcToLocal(m.UtcDate);
+      var d = DateOnly.FromDateTime(local);
+      return d >= from && d <= to;
+    }).ToList();
+  }
+
+  private static bool IntersectsRecent(DateOnly from, DateOnly to, int recentDays = 8)
+  {
+    var today = DateOnly.FromDateTime(DateTime.Now);
+    var recentStart = today.AddDays(-(recentDays - 1));
+    return !(to < recentStart || from > today);
+  }
+
   private async Task Reload()
   {
     if (!_hydrated) return;
 
+    // snapshot current range
+    var from = _startDate;
+    var to = _endDate;
+
+    _reloadCts?.Cancel();
+    _reloadCts?.Dispose();
+    _reloadCts = new CancellationTokenSource();
+    var ct = _reloadCts.Token;
+
+    var mySeq = ++_reloadSeq;
+
     _loading = true;
-    _selectedCompetitionName = ""; // Reset to All leagues when range changes
+    _selectedCompetitionName = "";
     StateHasChanged();
 
     try
     {
-      _items.Clear();
+      EnsureRangeResult? ensured = null;
 
-      var rangeMatches = await Api.GetRangeAsync(_startDate, _endDate);
-      _items.AddRange(rangeMatches);
+      // only ensure when range touches recent window
+      if (IntersectsRecent(from, to, recentDays: 8))
+      {
+        ensured = await Api.EnsureRangeFreshAsync(
+          from, to,
+          hotMin: 5,
+          warmMin: 60,
+          coldMin: 43200,
+          ct: ct
+        );
+      }
+
+      // read from DB
+      var rangeMatches = await Api.GetRangeAsync(from, to, competitionId: null, ct: ct);
+
+      // ignore stale result
+      if (ct.IsCancellationRequested || mySeq != _reloadSeq) return;
+
+      var inRange = FilterByRequestedRange(rangeMatches, from, to);
+      _items.Clear();
+      _items.AddRange(inRange);
 
       _updatedLocal = ConvertUtcToLocal(DateTime.UtcNow);
-      
-      var daySpan = (_endDate.DayNumber - _startDate.DayNumber) + 1;
-      _toast = $"Loaded {_items.Count} matches ({daySpan} days).";
+      var daySpan = (to.DayNumber - from.DayNumber) + 1;
+
+      //if (ensured?.syncedMatches > 0)
+      //  _toast = $"Updated {_items.Count} matches ({daySpan} days) — synced {ensured.syncedMatches}.";
+      //else
+       // _toast = $"Loaded {_items.Count} matches ({daySpan} days).";
     }
+    catch (OperationCanceledException) { }
     catch (Exception ex)
     {
-      _toast = $"Load failed: {ex.Message}";
+      if (!ct.IsCancellationRequested)
+        _toast = $"Load failed: {ex.Message}";
     }
     finally
     {
-      _loading = false;
-      StateHasChanged();
+      if (!ct.IsCancellationRequested)
+      {
+        _loading = false;
+        StateHasChanged();
+      }
     }
   }
 
+
   private sealed record LeagueOpt(string Name, int Count);
+
+  private string _leagueFilter = "";
 
   private List<LeagueOpt> LeagueOptions()
   {
-    // build options from current visible set (before league filter),
-    // so counts still respect FollowedTeamsOnly
     return VisibleMatchesRaw()
         .GroupBy(m => m.CompetitionName ?? "Other")
         .Select(g => new LeagueOpt(g.Key, g.Count()))
         .OrderByDescending(x => x.Count)
         .ThenBy(x => x.Name)
         .ToList();
+  }
+
+  private List<LeagueOpt> FilteredLeagueOptions()
+  {
+    var list = LeagueOptions();
+    if (string.IsNullOrWhiteSpace(_leagueFilter)) return list;
+    return list
+        .Where(o => (o.Name ?? "").Contains(_leagueFilter, StringComparison.OrdinalIgnoreCase))
+        .ToList();
+  }
+
+  private void OnLeagueFilterInput(ChangeEventArgs e)
+  {
+    _leagueFilter = (e.Value?.ToString() ?? "").Trim();
+    StateHasChanged();
   }
 
   private void ToggleLeagueDropdown()
@@ -577,57 +672,33 @@
     StateHasChanged();
   }
 
-  private async Task OnLeagueChanged(ChangeEventArgs e)
+  private IEnumerable<MatchDto> ApplyBaseFilters(IEnumerable<MatchDto> src)
   {
-    _selectedCompetitionName = e.Value?.ToString() ?? "";
-    StateHasChanged();
-    await Task.CompletedTask;
+      if (_prefs.FollowedTeamsOnly && _prefs.FollowedTeamIds.Count > 0)
+          src = src.Where(m => _prefs.FollowedTeamIds.Contains(m.HomeTeamId) ||
+                              _prefs.FollowedTeamIds.Contains(m.AwayTeamId));
+      return src;
   }
 
   private List<MatchDto> VisibleMatchesRaw()
-  {
-    IEnumerable<MatchDto> q = _items;
-
-    if (_prefs.FollowedTeamsOnly && _prefs.FollowedTeamIds.Count > 0)
-      q = q.Where(m => _prefs.FollowedTeamIds.Contains(m.HomeTeamId) ||
-                       _prefs.FollowedTeamIds.Contains(m.AwayTeamId));
-
-    return q.OrderBy(m => m.UtcDate).ToList();
-  }
+    => ApplyBaseFilters(_items).OrderBy(m => m.UtcDate).ToList();
 
   private List<MatchDto> VisibleMatches()
   {
-    IEnumerable<MatchDto> q = _items;
+      var q = ApplyBaseFilters(_items);
 
-    // followed teams filter
-    if (_prefs.FollowedTeamsOnly && _prefs.FollowedTeamIds.Count > 0)
-      q = q.Where(m => _prefs.FollowedTeamIds.Contains(m.HomeTeamId) ||
-                       _prefs.FollowedTeamIds.Contains(m.AwayTeamId));
+      if (!string.IsNullOrWhiteSpace(_selectedCompetitionName))
+          q = q.Where(m => string.Equals(m.CompetitionName ?? "Other", _selectedCompetitionName, StringComparison.Ordinal));
 
-    // league filter (by competition name)
-    if (!string.IsNullOrWhiteSpace(_selectedCompetitionName))
-      q = q.Where(m => string.Equals(m.CompetitionName ?? "Other",
-                                     _selectedCompetitionName,
-                                     StringComparison.Ordinal));
-
-    return q.OrderBy(m => m.UtcDate).ToList();
+      return q.OrderBy(m => m.UtcDate).ToList();
   }
 
   private Dictionary<DateOnly, List<MatchDto>> GroupByLocalDay(List<MatchDto> matches)
   {
-    var tz = TimeZoneInfo.FindSystemTimeZoneById(_tzId);
-
-    return matches
-      .GroupBy(m =>
-      {
-        var local = TimeZoneInfo.ConvertTimeFromUtc(
-          DateTime.SpecifyKind(m.UtcDate, DateTimeKind.Utc),
-          tz
-        );
-        return DateOnly.FromDateTime(local);
-      })
-      .OrderByDescending(g => g.Key)
-      .ToDictionary(g => g.Key, g => g.ToList());
+      return matches
+        .GroupBy(m => DateOnly.FromDateTime(ConvertUtcToLocal(m.UtcDate)))
+        .OrderByDescending(g => g.Key)
+        .ToDictionary(g => g.Key, g => g.ToList());
   }
 
   private static Dictionary<string, List<MatchDto>> GroupByCompetition(List<MatchDto> matches)
@@ -639,17 +710,11 @@
   }
 
   private DateTime ConvertUtcToLocal(DateTime utc)
-  {
-    var tz = TimeZoneInfo.FindSystemTimeZoneById(_tzId);
-    return TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), tz);
-  }
+    => TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), _tz!);
+
 
   private string FormatLocalTime(DateTime utcDate)
-  {
-    var tz = TimeZoneInfo.FindSystemTimeZoneById(_tzId);
-    var local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utcDate, DateTimeKind.Utc), tz);
-    return local.ToString("HH:mm");
-  }
+    => ConvertUtcToLocal(utcDate).ToString("HH:mm");
 
   // Team like/unlike functionality
   private bool IsLikedTeam(int teamId) 
