@@ -16,6 +16,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.3" />
+    <PackageReference Include="Raffinert.FuzzySharp" Version="4.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.2" />
     <PackageReference Include="System.ServiceModel.Syndication" Version="10.0.3" />
   </ItemGroup>

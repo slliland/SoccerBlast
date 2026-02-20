@@ -20,6 +20,7 @@ public class AppDbContext : DbContext
     public DbSet<Venue> Venues => Set<Venue>();
     public DbSet<VenueExternalMap> VenueExternalMaps => Set<VenueExternalMap>();
     public DbSet<MatchDaySyncState> MatchDaySyncStates => Set<MatchDaySyncState>();
+    public DbSet<SearchAlias> SearchAliases => Set<SearchAlias>();
 
     // EF won’t try to generate IDs
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -125,6 +126,23 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<MatchDaySyncState>(entity =>
         {
             entity.HasKey(x => x.LocalDate);
+        });
+
+        modelBuilder.Entity<SearchAlias>(entity =>
+        {
+            entity.Property(x => x.Canonical).IsRequired().HasMaxLength(128);
+            entity.Property(x => x.Alias).IsRequired().HasMaxLength(128);
+            entity.Property(x => x.AliasNorm).IsRequired().HasMaxLength(128);
+
+            // prevent duplicates
+            entity.HasIndex(x => new { x.Type, x.Canonical, x.Alias }).IsUnique();
+
+            // fast lookups for fuzzy resolver (prefix/contains on AliasNorm)
+            entity.HasIndex(x => new { x.Type, x.AliasNorm });
+
+            // optional but useful for admin/debug queries
+            entity.HasIndex(x => x.HitCount);
+            entity.HasIndex(x => x.UpdatedAtUtc);
         });
     }
 }

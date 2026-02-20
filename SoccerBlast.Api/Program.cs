@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using SoccerBlast.Api.Data;
 using SoccerBlast.Api.Services;
 using SoccerBlast.Api.Services.Video;
+using SoccerBlast.Api.Services.Search;
 
 // Load .env from project directory (THESPORTSDB_API_KEY)
 var envPath = Path.Combine(Directory.GetCurrentDirectory(), ".env");
@@ -90,6 +91,9 @@ builder.Services.AddHttpClient("youtube-rss", c =>
     c.DefaultRequestHeaders.UserAgent.ParseAdd("SoccerBlast/1.0");
 });
 
+// Search
+builder.Services.AddScoped<FuzzyAliasResolver>();
+
 // If these don’t depend on scoped services/db, singleton is OK
 builder.Services.AddSingleton<YouTubeRssClient>();
 builder.Services.AddSingleton<VideoAggregator>();
@@ -102,5 +106,12 @@ app.UseSwaggerUI();
 app.UseHttpsRedirection();
 
 app.MapControllers();
+
+if (Environment.GetEnvironmentVariable("BACKFILL_ALIASNORM") == "1")
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await AliasNormBackfill.RunAsync(db);
+}
 
 app.Run();

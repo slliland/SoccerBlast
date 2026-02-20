@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SoccerBlast.Api.Data;
 
@@ -10,9 +11,11 @@ using SoccerBlast.Api.Data;
 namespace SoccerBlast.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260220024850_AddSearchAliases")]
+    partial class AddSearchAliases
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.3");
@@ -268,17 +271,10 @@ namespace SoccerBlast.Api.Migrations
 
                     b.Property<string>("Alias")
                         .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("AliasNorm")
-                        .IsRequired()
-                        .HasMaxLength(128)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Canonical")
                         .IsRequired()
-                        .HasMaxLength(128)
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAtUtc")
@@ -297,15 +293,6 @@ namespace SoccerBlast.Api.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("HitCount");
-
-                    b.HasIndex("UpdatedAtUtc");
-
-                    b.HasIndex("Type", "AliasNorm");
-
-                    b.HasIndex("Type", "Canonical", "Alias")
-                        .IsUnique();
 
                     b.ToTable("SearchAliases");
                 });
