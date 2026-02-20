@@ -20,7 +20,7 @@ public static class TeamNameNormalizer
     private static readonly HashSet<string> Abbrevs = new(StringComparer.OrdinalIgnoreCase)
     {
         "FC", "CF", "AFC", "SC", "SS", "SV", "AS", "AC", "FK", "IF", "FF",
-        "OG", "BK", "IK", "SK", "HK", "US", "CS", "RC", "SD"
+        "OG", "BK", "IK", "SK", "HK", "US", "CS", "RC", "SD", "FSV", "TSV", "VFB", "VFL", "TSG", "FC", "SV"
     };
 
     /// <summary>Curated SportsDB search aliases (our name → their name). Max 2–3 used per team.</summary>
@@ -42,7 +42,49 @@ public static class TeamNameNormalizer
         ["Real Madrid"] = new[] { "Real Madrid" }, // exact often works
         ["Bayern Munich"] = new[] { "Bayern München" },
         ["Bayern München"] = new[] { "Bayern Munich" },
+        ["VfL Wolfsburg"] = new[] { "Wolfsburg" },
     };
+
+    public static IReadOnlyList<string> GetSearchCandidates(string teamName)
+    {
+        var list = new List<string>();
+        if (string.IsNullOrWhiteSpace(teamName)) return list;
+
+        var raw = teamName.Trim();
+        var n = Normalize(raw);
+        if (!string.IsNullOrWhiteSpace(n)) list.Add(n);
+
+        // If name starts with "1" / "1." (very common in Germany), drop it
+        // Example: "1 fsv mainz 05" -> "fsv mainz 05"
+        var dropLeadingNumber = Regex.Replace(n, @"^\d+\s+", "").Trim();
+        if (!string.IsNullOrWhiteSpace(dropLeadingNumber) && dropLeadingNumber != n)
+            list.Add(dropLeadingNumber);
+
+        // Drop common abbrev tokens in the middle, keep the “core city/name”
+        // Example: "fsv mainz 05" -> "mainz 05"
+        var tokens = dropLeadingNumber.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+        tokens.RemoveAll(t => Abbrevs.Contains(t));
+        var withoutAbbrevs = string.Join(" ", tokens).Trim();
+        if (!string.IsNullOrWhiteSpace(withoutAbbrevs) && withoutAbbrevs != dropLeadingNumber)
+            list.Add(withoutAbbrevs);
+
+        // If there are digits like "05", also try the pure name (often best)
+        // Example: "mainz 05" -> "mainz"
+        var noDigits = Regex.Replace(withoutAbbrevs, @"\b\d+\b", "").Trim();
+        noDigits = Regex.Replace(noDigits, @"\s+", " ").Trim();
+        if (!string.IsNullOrWhiteSpace(noDigits) && noDigits != withoutAbbrevs)
+            list.Add(noDigits);
+
+        // curated aliases (still ok, but optional)
+        foreach (var a in GetCuratedAliases(raw))
+            list.Add(a);
+
+        return list
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(4)
+            .ToArray();
+    }
+
 
     /// <summary>
     /// Normalize for matching: lowercase, remove accents, strip punctuation, strip suffixes, collapse whitespace, "&" → "and".

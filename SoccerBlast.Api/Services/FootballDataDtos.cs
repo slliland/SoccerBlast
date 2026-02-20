@@ -43,6 +43,10 @@ public class CompetitionItem
 
     [JsonPropertyName("area")]
     public AreaItem? Area { get; set; }
+
+    /// <summary>League badge/crest URL (e.g. from TheSportsDB strLeagueBadge).</summary>
+    [JsonPropertyName("crest")]
+    public string? Crest { get; set; }
 }
 
 public class TeamDetailsResponse
