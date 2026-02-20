@@ -336,20 +336,32 @@ body{ margin:0; background:transparent; }
 }
 
 /* =========================
-   MAIN
+   MAIN — two cards in same column: hero + matches (gap between)
 ========================= */
 .sb-main{
   margin-top: 0 !important;
   transform: translateY(0) !important;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
 }
 
+/* Main column is not a card; hero + matches-card are the two cards */
+.sb-card.sb-main{
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
 
+/* First card: hero banner */
 .hero.hero-banner{
   padding: 0;
-  background: transparent;
+  background: var(--card);
+  border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   overflow: hidden;
   height: 140px;
+  box-shadow: 0 4px 20px rgba(17,24,39,.04);
 }
 .hero-img{
   width:100%;
@@ -357,6 +369,15 @@ body{ margin:0; background:transparent; }
   display:block;
   object-fit:cover;
   object-position:center;
+}
+
+/* Second card: matches section (section-head + blocks) */
+.sb-main-matches-card{
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 20px rgba(17,24,39,.04);
+  padding: 16px;
 }
 
 .section-head{

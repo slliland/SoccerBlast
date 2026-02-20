@@ -365,7 +365,7 @@
               _items.Clear();
               _items.AddRange(inRange);
               _updatedLocal = ConvertUtcToLocal(DateTime.UtcNow);
-              _toast = $"Auto-synced {ensured.syncedMatches} matches.";
+              //_toast = $"Auto-synced {ensured.syncedMatches} matches.";
           }
 
           await InvokeAsync(StateHasChanged);
