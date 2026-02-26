@@ -1,5 +1,7 @@
 ## Build results
 [Bb]in/
+[Bb]in\\
+[Bb]in\\*/
 [Oo]bj/
 
 ## User-specific files
@@ -45,5 +47,10 @@ iisexpress/
 .env.*
 !*.example
 secrets.json
+appsettings.json
 appsettings.*.json
-!appsettings.json
+!appsettings.example.json
+
+scripts/
+docs/
+docs
