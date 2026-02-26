@@ -1,6 +1,7 @@
 @page "/"
 @using SoccerBlast.Shared.Contracts
 @inject SoccerBlast.Web.Services.SoccerApiClient Api
+@inject SoccerBlast.Web.Services.DashboardDataService DashboardData
 @using SoccerBlast.Web.Services
 @using Microsoft.AspNetCore.Components.Web
 @rendermode RenderMode.InteractiveServer
@@ -8,6 +9,7 @@
 @inject SoccerBlast.Web.Services.UserPrefsStore Prefs
 @using Microsoft.AspNetCore.Components.Routing
 @inject NavigationManager Nav
+@inject IJSRuntime JSRuntime
 @implements IDisposable
 
 <div class="sb-page" @onclick="CloseOverlays">
@@ -70,7 +72,7 @@
         <!-- LEFT: Leagues -->
         <div class="sb-left">
         <div class="sb-card sb-left-card">
-            <div class="sb-section-title">Football Leagues</div>
+            <div class="sb-section-title sb-card-title">Football Leagues</div>
             <div class="sb-league-filter-wrap" @onclick:stopPropagation="true">
                 <input type="text"
                        class="sb-league-filter"
@@ -89,11 +91,48 @@
                 <span class="league-meta">@_matches.Count</span>
                 </button>
 
-                @foreach (var group in LeagueTierService.GroupByTier(FilteredLeagues()))
+                @{
+                    var filtered = FilteredLeagues();
+                    var popularLeagues = filtered.Where(l => IsPopularLeague(l.CompetitionId, l.Name)).ToList();
+                    var popularOrder = LeagueTierService.GetPopularLeagueIdsOrdered().ToList();
+                    popularLeagues = popularLeagues.OrderBy(l => { var i = popularOrder.IndexOf(l.CompetitionId); return i < 0 ? int.MaxValue : i; }).ToList();
+                }
+                @if (popularLeagues.Count > 0)
+                {
+                    <div class="sb-tier-group">
+                        <div class="sb-tier-title">
+                            <img class="sb-tier-icon" src="images/icons/popular.png" alt="" />
+                            <span>Popular</span>
+                        </div>
+                        @foreach (var l in popularLeagues)
+                        {
+                            <button class="@(l.CompetitionId == _selectedCompetitionId ? "active" : "")"
+                                    @onclick="() => SelectCompetition(l.CompetitionId)">
+                                <span class="league-row">
+                                <img class="league-ic-img" src="@(l.BadgeUrl ?? LeagueIconMap.Get(l.CompetitionId, l.Name))" alt="@l.Name" />
+                                <span>@l.Name</span>
+                                @if (l.LiveCount > 0)
+                                {
+                                    <span class="badge-live">Live</span>
+                                }
+                                </span>
+                                <span class="league-meta">@l.MatchCount</span>
+                            </button>
+                        }
+                    </div>
+                }
+
+                @foreach (var sec in GroupLeaguesBySection(filtered.Where(l => !IsPopularLeague(l.CompetitionId, l.Name)).ToList()))
                 {
                 <div class="sb-tier-group">
-                    <div class="sb-tier-title">@group.TierLabel</div>
-                    @foreach (var l in group.Leagues)
+                    <div class="sb-tier-title">
+                        @if (!string.IsNullOrEmpty(sec.IconPath))
+                        {
+                            <img class="sb-tier-icon" src="@sec.IconPath" alt="" />
+                        }
+                        <span>@sec.Label</span>
+                    </div>
+                    @foreach (var l in sec.Leagues)
                     {
                     <button class="@(l.CompetitionId == _selectedCompetitionId ? "active" : "")"
                             @onclick="() => SelectCompetition(l.CompetitionId)">
@@ -122,11 +161,70 @@
             <img class="hero-img" src="images/banner/banner.png" alt="Banner" />
         </div>
 
-        <div class="sb-main-matches-card">
+        @if (!_loading && _matches.Count > 0)
+        {
+            var liveNow = GetLiveMatches();
+            var popularToday = GetPopularTodayMatches();
+            var yourTeamsMatches = GetYourTeamsMatches();
+            var showAllLive = _expandLiveNow;
+            var liveShow = showAllLive ? liveNow : liveNow.Take(8).ToList();
+            var showAllPopular = _expandPopularToday;
+            var popularShow = showAllPopular ? popularToday : popularToday.Take(8).ToList();
+            var showAllTeams = _expandYourTeams;
+            var teamsShow = showAllTeams ? yourTeamsMatches : yourTeamsMatches.Take(8).ToList();
+
+            @if (liveNow.Count > 0)
+            {
+                <div class="sb-card sb-dashboard-card">
+                    <div class="section-head">
+                        <h4 class="sb-card-title">Live Now <span class="sb-priority-count">@liveNow.Count</span></h4>
+                        @if (liveNow.Count > 8)
+                        {
+                            <button type="button" class="sb-priority-expand" @onclick='() => { _expandLiveNow = !_expandLiveNow; }'>
+                                @(showAllLive ? "Show less" : "Show all")
+                            </button>
+                        }
+                    </div>
+                    <div class="block">
+                        @foreach (var m in liveShow)
+                        {
+                            <DashboardMatchRow Match="m" Time="@FormatLocalTime(m.UtcDate)" HomeLiked="@IsLikedTeam(m.HomeTeamId)" AwayLiked="@IsLikedTeam(m.AwayTeamId)" HomeLikeIcon="@TeamLikeIcon(m.HomeTeamId)" AwayLikeIcon="@TeamLikeIcon(m.AwayTeamId)" OnToggleLike="HandleMatchRowToggleLike" />
+                        }
+                    </div>
+                </div>
+            }
+            @if (yourTeamsMatches.Count > 0)
+            {
+                <div class="sb-card sb-dashboard-card">
+                    <div class="section-head">
+                        <h4 class="sb-card-title">Your Teams <span class="sb-priority-count">@yourTeamsMatches.Count</span></h4>
+                        @if (yourTeamsMatches.Count > 8)
+                        {
+                            <button type="button" class="sb-priority-expand" @onclick='() => { _expandYourTeams = !_expandYourTeams; }'>
+                                @(showAllTeams ? "Show less" : $"Show all ({yourTeamsMatches.Count})")
+                            </button>
+                        }
+                    </div>
+                    <div class="block">
+                        @foreach (var m in teamsShow)
+                        {
+                            <DashboardMatchRow Match="m" Time="@FormatLocalTime(m.UtcDate)" HomeLiked="@IsLikedTeam(m.HomeTeamId)" AwayLiked="@IsLikedTeam(m.AwayTeamId)" HomeLikeIcon="@TeamLikeIcon(m.HomeTeamId)" AwayLikeIcon="@TeamLikeIcon(m.AwayTeamId)" OnToggleLike="HandleMatchRowToggleLike" />
+                        }
+                    </div>
+                </div>
+            }
+        }
+
+        <div class="sb-main-matches-card" id="sb-matches-card">
         <div class="section-head">
-            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;">
-                <h4 style="margin:0;">Matches</h4>
-                <span class="small-muted">Updated @_matchesUpdatedLocal.ToString("HH:mm")</span>
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                <h4 class="sb-card-title">Matches</h4>
+                <div class="sb-match-scope-toggle">
+                    <button type="button" class="sb-scope-btn @(_matchScope == "popular" ? "active" : "")" @onclick='() => _matchScope = "popular"'>Popular</button>
+                    <button type="button" class="sb-scope-btn @(_matchScope == "all" ? "active" : "")" @onclick='() => _matchScope = "all"'>All</button>
+                    <button type="button" class="sb-scope-btn @(_matchScope == "following" ? "active" : "")" @onclick='() => _matchScope = "following"'>Following</button>
+                </div>
+                <span class="sb-card-updated">Updated @_matchesUpdatedLocal.ToString("HH:mm")</span>
             </div>
             <div class="small-muted">
             <button class="btn" style="padding:8px 10px;border-radius:12px;" @onclick="PrevDay">◀</button>
@@ -267,8 +365,8 @@
         <!-- RIGHT: News -->
         <div class="sb-right sb-card">
         <div class="section-head">
-            <h4>Recent News</h4>
-            <span class="small-muted">Updated @_nowLocal.ToString("HH:mm")</span>
+            <h4 class="sb-card-title">Recent News</h4>
+            <span class="sb-card-updated">Updated @_nowLocal.ToString("HH:mm")</span>
         </div>
 
         @foreach (var n in _news)
@@ -303,6 +401,11 @@
   private List<MatchDto> _matches = new();
 
   private int _selectedCompetitionId = -1; // -1 = All
+  /// <summary>Match list scope: popular (curated leagues), all, following, or national (national teams only).</summary>
+  private string _matchScope = "popular";
+  private bool _expandLiveNow;
+  private bool _expandPopularToday;
+  private bool _expandYourTeams;
   private List<LeagueDto> _leagues = new();
 
   // news
@@ -409,8 +512,8 @@
 
     try
     {
-        // debounce
-        await Task.Delay(250, token);
+        // debounce: wait before calling API to avoid a request on every keystroke
+        await Task.Delay(400, token);
 
         if (_q.Trim().Length < 2)
         {
@@ -534,19 +637,29 @@
 
   private void StartLoops()
   {
-    // Match sync loop - refresh current date every 60s
+    // Match sync loop - refresh current date every 60s via DashboardDataService
     _matchLoop = new AutoSyncLoop(TimeSpan.FromSeconds(60), async _ =>
     {
+        if (_loading) return; // skip if initial load or manual refresh in progress
         var d = _viewDate;
-        await Api.SyncByLocalDateAsync(d);
-        var fresh = await Api.GetByLocalDateAsync(d);
-        await InvokeAsync(() =>
+        try
         {
-            _matches = fresh;
-            _leagues = BuildLeagues(_matches);
-            _matchesUpdatedLocal = ConvertUtcToLocal(DateTime.UtcNow);
-            StateHasChanged();
-        });
+            var result = await DashboardData.LoadMatchesForDateAsync(d, trySyncAfterLoad: true);
+
+            var latest = result.RefreshedMatches ?? result.InitialMatches;
+
+            await InvokeAsync(() =>
+            {
+                _matches = latest;
+                _leagues = BuildLeagues(_matches);
+                _matchesUpdatedLocal = ConvertUtcToLocal(DateTime.UtcNow);
+                StateHasChanged();
+            });
+        }
+        catch
+        {
+            // keep existing data if refresh fails
+        }
     });
     _matchLoop.Start();
 
@@ -561,8 +674,8 @@
     });
     _clockLoop.Start();
 
-    // News refresh loop - fetch news every 60s
-    _newsLoop = new AutoSyncLoop(TimeSpan.FromSeconds(60), async _ =>
+    // News refresh loop - fetch news every 120s (staggered from /news 60s to reduce API load)
+    _newsLoop = new AutoSyncLoop(TimeSpan.FromSeconds(120), async _ =>
     {
         var news = await Api.GetRecentNewsAsync(10);
         await InvokeAsync(() =>
@@ -590,72 +703,76 @@
   {
     _selectedCompetitionId = -1;
 
-    // Immediately show whatever is already in DB (fast)
     _loading = true;
     _toast = null;
     StateHasChanged();
 
     try
     {
-      _matches = await Api.GetByLocalDateAsync(d) ?? new();
-      _leagues = BuildLeagues(_matches);
-      _matchesUpdatedLocal = ConvertUtcToLocal(DateTime.UtcNow);
+        // Fast load + optional sync refresh handled by service
+        var result = await DashboardData.LoadMatchesForDateAsync(d, trySyncAfterLoad: true);
+
+        // show initial immediately
+        _matches = result.InitialMatches;
+        _leagues = BuildLeagues(_matches);
+        _matchesUpdatedLocal = ConvertUtcToLocal(DateTime.UtcNow);
+
+        _loading = false;
+        StateHasChanged();
+
+        // apply refreshed result whenever sync completed (even if 0 matches)
+        if (result.RefreshedMatches != null)
+        {
+            _matches = result.RefreshedMatches;
+            _leagues = BuildLeagues(_matches);
+            _matchesUpdatedLocal = ConvertUtcToLocal(DateTime.UtcNow);
+        }
+
+        if (result.SyncedCount > 0)
+            _toast = $"Updated {result.SyncedCount} matches.";
+        else if (!string.IsNullOrWhiteSpace(result.Warning))
+            _toast = $"Sync failed: {result.Warning}";
     }
     catch (Exception ex)
     {
-      _matches = new();
-      _leagues = new();
-      _toast = $"Could not load matches: {ex.Message}";
+        _matches = new();
+        _leagues = new();
+        _loading = false;
+        _toast = $"Could not load matches: {ex.Message}";
     }
-    finally
-    {
-      _loading = false;
-    }
+
     StateHasChanged();
 
-    // Load news in parallel (don’t block UI)
+    // News (separate, non-blocking)
     _ = Task.Run(async () =>
     {
         try
         {
-            var news = await Api.GetRecentNewsAsync(10);
+            var news = await DashboardData.LoadNewsAsync(10);
             await InvokeAsync(() =>
             {
                 _news = news;
                 StateHasChanged();
             });
         }
-        catch { /* ignore */ }
+        catch { }
     });
-
-    // Sync in background, then refresh matches
-    try
-    {
-        var synced = await Api.SyncByLocalDateAsync(d);
-        if (synced > 0)
-        {
-            _toast = $"Updated {synced} matches.";
-            var fresh = await Api.GetByLocalDateAsync(d) ?? new();
-            await InvokeAsync(() =>
-            {
-                _matches = fresh;
-                _matchesUpdatedLocal = ConvertUtcToLocal(DateTime.UtcNow);
-                _leagues = BuildLeagues(_matches);
-                StateHasChanged();
-            });
-        }
-    }
-    catch (Exception ex)
-    {
-        _toast = $"Sync failed: {ex.Message}";
-        await InvokeAsync(StateHasChanged);
-    }
   }
 
-  private void SelectCompetition(int competitionId)
+  private async Task SelectCompetition(int competitionId)
   {
     _selectedCompetitionId = competitionId;
     _toast = null;
+    try
+    {
+      await JSRuntime.InvokeVoidAsync("eval", "var el = document.getElementById('sb-matches-card'); if(el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });");
+    }
+    catch { /* ignore if JS not available */ }
+  }
+
+  private async Task HandleMatchRowToggleLike((int teamId, string name, string? crest) t)
+  {
+    await ToggleLikeTeam(t.teamId, t.name, t.crest);
   }
 
   private async Task PrevDay()
@@ -675,20 +792,105 @@
     IEnumerable<MatchDto> q = _matches;
 
     if (_selectedCompetitionId != -1)
-        q = q.Where(m => m.CompetitionId == _selectedCompetitionId);
+    {
+      // League selected in sidebar: show only that league's matches (ignore scope)
+      return q.Where(m => m.CompetitionId == _selectedCompetitionId).ToList();
+    }
 
-    if (_prefs.FollowedTeamsOnly && _prefs.FollowedTeamIds.Count > 0)
-        q = q.Where(m => _prefs.FollowedTeamIds.Contains(m.HomeTeamId) ||
-                         _prefs.FollowedTeamIds.Contains(m.AwayTeamId));
+    // "All" selected: apply scope filter
+    if (_matchScope == "following")
+    {
+        var followedIds = _prefs.FollowedTeamIds?.Where(id => id != 0).ToHashSet() ?? new HashSet<int>();
+        if (followedIds.Count > 0)
+            q = q.Where(m => followedIds.Contains(m.HomeTeamId) || followedIds.Contains(m.AwayTeamId));
+    }
+    else if (_matchScope == "popular")
+    {
+        q = q.Where(m => IsPopularLeague(m.CompetitionId, m.CompetitionName));
+    }
+    else if (_matchScope == "national")
+    {
+        q = q.Where(m => LeagueTierService.GetTier(m.CompetitionName) == LeagueTierService.InternationalNational);
+    }
+    else if (_prefs.FollowedTeamsOnly)
+    {
+        var followedIds = _prefs.FollowedTeamIds?.Where(id => id != 0).ToHashSet() ?? new HashSet<int>();
+        if (followedIds.Count > 0)
+            q = q.Where(m => followedIds.Contains(m.HomeTeamId) || followedIds.Contains(m.AwayTeamId));
+    }
 
     return q.ToList();
   }
+
+  private static readonly (string Section, string Label, string? IconPath)[] SectionOrder =
+  {
+      ("Popular", "Popular", "images/icons/popular.png"),
+      ("International", "International", "images/icons/international.png"),
+      ("Domestic", "Domestic Leagues", "images/icons/domestic.png"),
+      ("Cups", "Cups", "images/icons/cups.png"),
+      ("More", "More", null)
+  };
+
+  private static string GetSectionForTier(string tier)
+  {
+      if (tier == LeagueTierService.InternationalNational) return "International";
+      if (tier == LeagueTierService.ContinentalClub) return "Popular";
+      if (tier == LeagueTierService.DomesticTop) return "Domestic";
+      if (tier == LeagueTierService.DomesticCups) return "Cups";
+      return "More";
+  }
+
+  private static IReadOnlyList<(string Label, string? IconPath, List<LeagueDto> Leagues)> GroupLeaguesBySection(List<LeagueDto> leagues)
+  {
+      var tierGroups = LeagueTierService.GroupByTier(leagues);
+      var bySection = new Dictionary<string, List<LeagueDto>>(StringComparer.OrdinalIgnoreCase);
+      foreach (var (section, _, _) in SectionOrder)
+          bySection[section] = new List<LeagueDto>();
+      foreach (var (tierLabel, tierLeagues) in tierGroups)
+      {
+          var section = GetSectionForTier(tierLabel);
+          bySection[section].AddRange(tierLeagues);
+      }
+      return SectionOrder
+          .Where(s => bySection[s.Section].Count > 0)
+          .Select(s => (s.Label, s.IconPath, bySection[s.Section]))
+          .ToList();
+  }
+
+  private static bool IsPopularLeague(int competitionId, string? name) => LeagueTierService.IsRecommendedPopular(competitionId, name);
+
+  private List<MatchDto> GetLiveMatches()
+  {
+    return _matches
+        .Where(m => MatchDisplayHelper.IsLiveStatus(m.Status))
+        .OrderByDescending(m => IsPopularLeague(m.CompetitionId, m.CompetitionName))
+        .ThenBy(m => m.UtcDate)
+        .ToList();
+  }
+
+  private List<MatchDto> GetPopularTodayMatches()
+  {
+    return _matches
+        .Where(m => !MatchDisplayHelper.IsLiveStatus(m.Status) && IsPopularLeague(m.CompetitionId, m.CompetitionName))
+        .OrderBy(m => m.UtcDate)
+        .ToList();
+  }
+
+  private List<MatchDto> GetYourTeamsMatches()
+  {
+    var followedIds = _prefs.FollowedTeamIds?.Where(id => id != 0).ToHashSet() ?? new HashSet<int>();
+    if (followedIds.Count == 0) return new List<MatchDto>();
+    return _matches
+        .Where(m => followedIds.Contains(m.HomeTeamId) || followedIds.Contains(m.AwayTeamId))
+        .OrderBy(m => m.UtcDate)
+        .ToList();
+  }
+
 
   private string _tzId = "America/New_York";
 
   private string FormatLocalTime(DateTime utcDate)
   {
-    // utcDate should represent UTC from API
     var tz = TimeZoneInfo.FindSystemTimeZoneById(_tzId);
     var local = TimeZoneInfo.ConvertTimeFromUtc(
         DateTime.SpecifyKind(utcDate, DateTimeKind.Utc),
@@ -696,6 +898,8 @@
     );
     return local.ToString("HH:mm");
   }
+
+  private string FormatLocalTime(DateTimeOffset utcDate) => FormatLocalTime(utcDate.UtcDateTime);
 
   private static IReadOnlyList<KeyValuePair<string, List<MatchDto>>> GroupByCompetition(List<MatchDto> matches)
   {

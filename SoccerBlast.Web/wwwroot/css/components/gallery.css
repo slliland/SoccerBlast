@@ -1,0 +1,113 @@
+/* Shared gallery grid + lightbox (Team, Player) */
+.sb-gallery-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.sb-gallery-img{
+  width: 100%;
+  aspect-ratio: 16/10;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  cursor: pointer;
+}
+
+.sb-gallery-img:hover{
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 10px 30px rgba(15,23,42,0.25);
+  border-color: #f59e0b;
+}
+
+.sb-gallery-overlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(15,23,42,0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 40;
+  backdrop-filter: blur(6px);
+}
+
+.sb-gallery-modal{
+  position: relative;
+  max-width: min(960px, 100vw - 40px);
+  max-height: min(620px, 100vh - 80px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sb-gallery-modal .sb-gallery-img{
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: unset;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  object-fit: contain;
+  cursor: default;
+  transform: none;
+}
+
+.sb-gallery-modal .sb-gallery-img:hover{
+  transform: none;
+}
+
+.sb-gallery-close{
+  position: absolute;
+  top: -40px;
+  right: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(15,23,42,0.9);
+  color: #f9fafb;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sb-gallery-close:hover{
+  background: #111827;
+}
+
+.sb-gallery-nav{
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(15,23,42,0.9);
+  color: #f9fafb;
+  font-size: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sb-gallery-nav-prev{
+  left: -52px;
+}
+
+.sb-gallery-nav-next{
+  right: -52px;
+}
+
+.sb-gallery-nav:hover{
+  background: #111827;
+}
+
+@media (max-width: 640px){
+  .sb-gallery-nav-prev{ left: 8px; }
+  .sb-gallery-nav-next{ right: 8px; }
+}

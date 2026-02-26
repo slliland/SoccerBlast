@@ -158,7 +158,7 @@
           {
             <div class="sb-news-empty">
               <p>No news found for your followed teams yet.</p>
-              <p class="small-muted">News auto-syncs every 30 seconds. New articles will appear here automatically!</p>
+              <p class="small-muted">News auto-syncs every 60 seconds. New articles will appear here automatically!</p>
             </div>
           }
           else
@@ -277,8 +277,8 @@
     await LoadTeamNamesAsync();
     await InitialLoad();
 
-    // Auto-sync every 30 seconds (news updates frequently)
-    _newsLoop = new AutoSyncLoop(TimeSpan.FromSeconds(30), async _ =>
+    // Auto-sync every 60 seconds (reduces overlap with dashboard poll)
+    _newsLoop = new AutoSyncLoop(TimeSpan.FromSeconds(60), async _ =>
     {
       await BackgroundSync();
     });

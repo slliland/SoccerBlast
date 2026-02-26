@@ -35,7 +35,13 @@ public sealed class UserPrefsStore
             prefs.FollowedTeamIds ??= new();
             prefs.PinnedCompetitionIds ??= new();
             prefs.FollowedTeamsInfo ??= new();
-            prefs.FollowedTeamIds = prefs.FollowedTeamIds.Distinct().ToList();
+            // Sync IDs from info so id-based filter works (e.g. after migration from name-based)
+            if (prefs.FollowedTeamsInfo.Count > 0)
+            {
+                var fromInfo = prefs.FollowedTeamsInfo.Keys.Where(id => id != 0).ToHashSet();
+                prefs.FollowedTeamIds = prefs.FollowedTeamIds.Union(fromInfo).Where(id => id != 0).Distinct().ToList();
+            }
+            prefs.FollowedTeamIds = prefs.FollowedTeamIds.Where(id => id != 0).Distinct().ToList();
             prefs.PinnedCompetitionIds = prefs.PinnedCompetitionIds.Distinct().ToList();
 
             prefs.DefaultViewMode =

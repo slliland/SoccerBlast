@@ -1,0 +1,53 @@
+@* Map block: MapLibre GL JS + OpenFreeMap. Optional MapElementId for resize when tab becomes visible. *@
+@using SoccerBlast.Web.Helpers
+@inject IJSRuntime JS
+
+@if (Latitude.HasValue && Longitude.HasValue)
+{
+  var lat = Latitude.Value;
+  var lng = Longitude.Value;
+  var openUrl = MapHelper.GetOpenUrl(lat, lng);
+  <div class="team-section-block team-stadium-map-block">
+    <h3 class="team-block-title">Map</h3>
+    <div class="team-stadium-map-wrap">
+      <div class="team-stadium-map-container">
+        <div id="@MapElementId" class="team-stadium-map-iframe"></div>
+        <a href="@openUrl"
+           target="_blank"
+           rel="noopener noreferrer"
+           class="team-stadium-map-open-link">Open in OpenStreetMap</a>
+      </div>
+    </div>
+  </div>
+}
+
+@code {
+  [Parameter] public double? Latitude { get; set; }
+  [Parameter] public double? Longitude { get; set; }
+  [Parameter] public string? MapCoordinates { get; set; }
+  [Parameter] public string? Country { get; set; }
+  [Parameter] public string? VenueName { get; set; }
+  /// <summary>Optional fixed id so parent can call soccerBlastMaps.resizeVenueMap(id) when tab becomes visible.</summary>
+  [Parameter] public string? MapElementId { get; set; }
+
+  private readonly string _generatedId = "venue-map-" + Guid.NewGuid().ToString("N")[..8];
+  private string _mapId => !string.IsNullOrWhiteSpace(MapElementId) ? MapElementId : _generatedId;
+
+  protected override async Task OnAfterRenderAsync(bool firstRender)
+  {
+    if (!firstRender || !Latitude.HasValue || !Longitude.HasValue) return;
+    try
+    {
+      await JS.InvokeVoidAsync(
+        "soccerBlastMaps.initVenueMap",
+        _mapId,
+        Latitude.Value,
+        Longitude.Value,
+        VenueName ?? "Venue");
+    }
+    catch
+    {
+      // MapLibre or maps.js not available
+    }
+  }
+}

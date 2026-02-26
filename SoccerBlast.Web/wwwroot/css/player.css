@@ -1,6 +1,9 @@
 /* Player detail page (uses team-* for shared layout) */
 .player-hero{
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%) !important;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   height: 320px;
 }
 
@@ -11,12 +14,58 @@
   gap: 24px !important;
 }
 
+.player-hero-photo-wrap{
+  position: relative;
+  flex-shrink: 0;
+  padding: 4px;
+  border-radius: 50%;
+  background: #64748b;
+}
+.player-hero-photo-wrap.player-hero-status-active{
+  background: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34,197,94,0.5);
+}
+.player-hero-photo-wrap.player-hero-status-inactive{
+  background: #64748b;
+  box-shadow: 0 0 0 2px rgba(100,116,139,0.4);
+}
+.player-hero-photo-wrap .player-hero-photo{
+  display: block;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: none;
+}
+.player-hero-status-tag{
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  background: rgba(15,23,42,0.85);
+  color: #f1f5f9;
+}
+.player-hero-status-active .player-hero-status-tag{
+  background: #22c55e;
+  color: #fff;
+}
+.player-hero-status-inactive .player-hero-status-tag{
+  background: #64748b;
+  color: #e2e8f0;
+}
+
 .player-hero-photo{
   width: 120px;
   height: 120px;
   border-radius: 50%;
   object-fit: cover;
-  border: 4px solid rgba(255,255,255,0.3);
   flex-shrink: 0;
 }
 
@@ -40,4 +89,941 @@
 .player-hero-info .team-hero-name{
   font-size: 36px;
   margin: 0;
+}
+
+/* Section titles with icon (badge / honour / trophy style) */
+.team-block-title-with-icon{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.team-block-title-icon{
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+/* Profile: poster + fields layout */
+.player-profile-layout{
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 24px;
+  align-items: start;
+  margin-bottom: 24px;
+}
+@media (max-width: 640px){
+  .player-profile-layout{
+    grid-template-columns: 1fr;
+  }
+}
+.player-poster-block{
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(15,23,42,0.15);
+  background: #f1f5f9;
+}
+.player-poster-img{
+  display: block;
+  width: 220px;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 2/3;
+  object-fit: cover;
+}
+@media (max-width: 640px){
+  .player-poster-block{ margin: 0 auto; }
+  .player-poster-img{ width: 180px; }
+}
+.player-profile-fields{
+  min-width: 0;
+}
+
+/* Profile: Description & Season Stats */
+.player-description,
+.player-season-stats{
+  white-space: pre-wrap;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #334155;
+}
+
+/* Career / Former Teams */
+.player-career-list,
+.player-contracts-list{
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.player-career-item,
+.player-contract-item{
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.player-career-badge{
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.player-career-info,
+.player-contract-info{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.player-career-team,
+.player-contract-info .player-career-team{
+  font-weight: 700;
+  font-size: 15px;
+  color: #0f172a;
+}
+
+.player-link{
+  text-decoration: none;
+  color: inherit;
+}
+.player-link:hover{
+  color: #f59e0b;
+  text-decoration: underline;
+}
+
+.player-career-years,
+.player-career-joined{
+  font-size: 13px;
+  color: #64748b;
+}
+
+/* Career Path timeline (chronology-first, two lanes) – same width as other tabs */
+.player-career-timeline-wrap{
+  /* no max-width: use full tab content width like Profile, Honours, etc. */
+}
+
+.player-career-timeline-wrap .team-block-title{
+  margin-bottom: 12px;
+}
+
+.player-career-summary{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  padding: 12px 16px;
+  background: #f1f5f9;
+  border-radius: 12px;
+  font-size: 13px;
+  color: #475569;
+  margin-bottom: 24px;
+}
+
+.player-career-summary strong{
+  color: #0f172a;
+}
+
+.player-career-timeline{
+  position: relative;
+  padding: 0 16px;
+  padding-top: 8px;
+}
+
+.player-career-spine{
+  position: absolute;
+  left: 50%;
+  transform: translateX(-1px);
+  top: 32px;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, #cbd5e1, #94a3b8, #64748b);
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+.player-career-dev-label{
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin: 0 0 12px 0;
+  padding: 4px 0;
+  text-align: center;
+  width: 100%;
+  position: relative;
+  z-index: 1;
+  background: var(--player-tab-bg, #fff);
+}
+
+.player-career-row{
+  position: relative;
+  margin-bottom: 12px;
+  min-height: 56px;
+  display: flex;
+  justify-content: center;
+}
+
+.player-career-node{
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  position: relative;
+  width: calc(50% - 24px);
+}
+
+.player-career-node-club{
+  border-left: 3px solid #f59e0b;
+  margin-right: auto;
+}
+
+.player-career-node-national{
+  border-left: 3px solid #059669;
+  background: #f0fdf4;
+  margin-left: auto;
+}
+
+.player-career-node-club .player-career-node-bar{ left: 0; }
+.player-career-node-national .player-career-node-bar{ left: 0; }
+
+.player-career-node-youth{
+  background: #f8fafc;
+  opacity: 0.95;
+}
+
+.player-career-node-youth .player-career-node-badge{
+  width: 32px;
+  height: 32px;
+}
+
+.player-career-node-bar{
+  position: relative;
+  width: 32px;
+  min-width: 32px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+  align-self: stretch;
+}
+
+.player-career-node-bar::after{
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 18px;
+  min-height: 6px;
+  background: #94a3b8;
+  border-radius: 0 0 4px 4px;
+  height: calc(var(--duration-pct, 20) * 1%);
+  z-index: 0;
+}
+
+.player-career-node-bar-years{
+  position: relative;
+  z-index: 1;
+  font-size: 10px;
+  font-weight: 700;
+  color: #475569;
+  padding: 2px 0 4px 0;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+
+.player-career-node-badge{
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.player-career-node-body{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.player-career-node-name{
+  font-weight: 700;
+  font-size: 15px;
+  color: #0f172a;
+  width: 100%;
+}
+
+.player-career-node-years,
+.player-career-node-duration{
+  font-size: 13px;
+  color: #64748b;
+}
+
+.player-career-node-chips{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.player-career-chip{
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.player-career-chip-return{
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.player-career-chip-national{
+  background: #d1fae5;
+  color: #047857;
+}
+
+.player-career-chip-youth{
+  background: #e0e7ff;
+  color: #4338ca;
+}
+
+.player-career-chip-senior{
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.player-career-source-note{
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.player-contract-wage,
+.player-contract-signing{
+  font-size: 13px;
+  color: #475569;
+}
+
+/* Honours */
+.player-honours-list{
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.player-honour-item{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+.player-honour-icon{
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.player-honour-title{
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.player-honour-meta{
+  font-size: 13px;
+  color: #64748b;
+}
+
+/* Honours Trophy Cabinet */
+.player-honours-cabinet-wrap .team-block-title{
+  margin-bottom: 4px;
+}
+
+.player-honours-subtitle{
+  font-size: 13px;
+  color: #64748b;
+  margin: 0 0 16px 0;
+}
+
+.player-honours-summary-band{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  padding: 14px 18px;
+  background: #f1f5f9;
+  border-radius: 12px;
+  font-size: 13px;
+  color: #475569;
+  margin-bottom: 20px;
+}
+
+.player-honours-summary-band strong{
+  color: #0f172a;
+}
+
+.player-honours-controls{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.player-honours-controls-row{
+  margin-top: 8px;
+}
+
+.player-honours-control-label{
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.player-honours-filters{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.player-honours-filter{
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.player-honours-filter:hover{
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.player-honours-filter.active{
+  background: #f59e0b;
+  border-color: #f59e0b;
+  color: #fff;
+}
+
+.player-honours-sort{
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #334155;
+}
+
+.player-honours-view-toggle{
+  display: flex;
+  gap: 4px;
+}
+
+.player-honours-view-btn{
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.player-honours-view-btn:hover{
+  background: #f8fafc;
+}
+
+.player-honours-view-btn.active{
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #fff;
+}
+
+.player-honours-category{
+  margin-bottom: 20px;
+}
+
+.player-honours-category-header{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.2s;
+}
+
+.player-honours-category-header:hover{
+  background: #f1f5f9;
+}
+
+.player-honours-category-title{
+  flex: 1;
+}
+
+.player-honours-category-count{
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.player-honours-category-chevron{
+  font-size: 10px;
+  color: #64748b;
+}
+
+.player-honours-card-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+  padding-left: 4px;
+}
+
+.player-honours-card{
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+.player-honours-card-prestige{
+  border-left: 4px solid #f59e0b;
+  box-shadow: 0 2px 8px rgba(245,158,11,0.12);
+}
+
+.player-honours-card-recurring{
+  background: #fafafa;
+  border-color: #e5e7eb;
+}
+
+.player-honours-card-icon{
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.player-honours-card-body{
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.player-honours-card-name{
+  font-weight: 700;
+  font-size: 14px;
+  color: #0f172a;
+  line-height: 1.3;
+}
+
+.player-honours-card-sub{
+  font-size: 12px;
+  color: #64748b;
+}
+
+.player-honours-card-chips{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.player-honours-year-chip{
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.player-honours-more-btn{
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px dashed #94a3b8;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.player-honours-more-btn:hover{
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.player-honours-card-meta{
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+
+.player-honours-card-count{
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+
+.player-honours-card-number{
+  font-size: 24px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.1;
+}
+
+.player-honours-card-label{
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.player-honours-timeline-list{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.player-honours-timeline-item{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+.player-honours-timeline-year{
+  font-weight: 700;
+  font-size: 13px;
+  color: #64748b;
+  min-width: 72px;
+}
+
+.player-honours-timeline-name{
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.player-honours-timeline-meta{
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* Milestones */
+.player-milestones-list{
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.player-milestone-item{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+.player-milestone-icon{
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.player-milestone-info{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.player-milestone-name{
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.player-milestone-meta,
+.player-milestone-stat{
+  font-size: 13px;
+  color: #64748b;
+}
+
+/* Career Moments (Milestones) — timeline & cards */
+.player-milestones-moments-wrap .team-block-title{ margin-bottom: 4px; }
+.player-milestones-subtitle{
+  font-size: 13px;
+  color: #64748b;
+  margin: 0 0 16px 0;
+}
+.player-milestones-summary-band{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  padding: 14px 18px;
+  background: #f1f5f9;
+  border-radius: 12px;
+  font-size: 13px;
+  color: #475569;
+  margin-bottom: 20px;
+}
+.player-milestones-summary-band strong{ color: #0f172a; }
+.player-milestones-controls{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.player-milestones-timeline{
+  position: relative;
+  padding-left: 24px;
+  padding-top: 8px;
+}
+.player-milestones-spine{
+  position: absolute;
+  left: 8px;
+  top: 32px;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, #cbd5e1, #94a3b8);
+  border-radius: 1px;
+}
+.player-milestones-year-header{
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--player-tab-bg, #fff);
+  font-size: 14px;
+  font-weight: 800;
+  color: #64748b;
+  padding: 12px 0 8px 0;
+  margin-left: 8px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 8px;
+}
+.player-milestones-row{
+  margin-bottom: 12px;
+  margin-left: 8px;
+}
+.player-milestone-card{
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 12px 16px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.player-milestone-card-featured{
+  border-left: 4px solid #f59e0b;
+  box-shadow: 0 2px 8px rgba(245,158,11,0.12);
+}
+.player-milestone-card-icon{
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.player-milestone-card-body{
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.player-milestone-card-title{
+  font-weight: 700;
+  font-size: 14px;
+  color: #0f172a;
+  line-height: 1.3;
+}
+.player-milestone-card-featured .player-milestone-card-title{ font-size: 15px; }
+.player-milestone-card-team{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #64748b;
+}
+.player-milestone-card-badge{
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+.player-milestone-card-meta{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+.player-milestone-card-date{
+  font-size: 12px;
+  color: #64748b;
+}
+.player-milestone-chip{
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+}
+.player-milestone-chip-record{ background: #fef3c7; color: #b45309; }
+.player-milestone-chip-hattrick{ background: #dbeafe; color: #1d4ed8; }
+.player-milestone-chip-potm{ background: #e0e7ff; color: #4338ca; }
+.player-milestone-chip-monthly{ background: #f3e8ff; color: #7c3aed; }
+.player-milestone-chip-dreamteam{ background: #d1fae5; color: #047857; }
+.player-milestone-chip-tournament{ background: #fef3c7; color: #b45309; }
+.player-milestone-chip-league{ background: #e0f2fe; color: #0369a1; }
+.player-milestone-chip-other{ background: #f1f5f9; color: #64748b; }
+.player-milestone-card-sub{
+  font-size: 12px;
+  color: #64748b;
+  font-style: italic;
+}
+.player-milestones-compact-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+.player-milestones-compact-grid .player-milestone-card{
+  margin-left: 0;
+}
+
+/* Media tab: featured cutout/thumb, kit */
+.player-media-featured{
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+}
+.player-media-cutout{
+  max-width: 280px;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 24px rgba(15,23,42,0.12));
+}
+.player-kit-display{
+  display: flex;
+  justify-content: center;
+  padding: 24px 20px;
+}
+.player-kit-image{
+  max-width: 320px;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+}
+
+/* Other Links */
+.player-links-list{
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.player-link-item{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.player-link-item:hover{
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.player-link-icon-img{
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.player-no-enrichment{
+  margin-top: 16px;
+  padding: 12px 0;
 }

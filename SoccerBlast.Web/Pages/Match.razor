@@ -1,0 +1,370 @@
+@page "/match/{Id}"
+@rendermode RenderMode.InteractiveServer
+@using Microsoft.AspNetCore.Components.Web
+@using SoccerBlast.Shared.Contracts
+@inject SoccerBlast.Web.Services.SoccerApiClient Api
+@inject NavigationManager Nav
+
+<div class="team-page match-page">
+  @if (_loading)
+  {
+    <div class="team-loading">
+      <GlobalSpinner Message="Loading match..." FullPage="true" />
+    </div>
+  }
+  else if (_data is null)
+  {
+    <div class="team-error">
+      <p>Match not found.</p>
+      <button class="team-back-btn" @onclick="GoBack" type="button">← Back</button>
+    </div>
+  }
+  else
+  {
+    var ev = _data.Event;
+    var heroBg = ev.StrBanner ?? ev.StrThumb ?? ev.StrPoster ?? "images/teams/stadium-cenit-view-.png";
+    <div class="team-hero match-hero" style="background-image: url('@heroBg')">
+      <div class="team-hero-overlay"></div>
+      <div class="team-hero-content">
+        <button class="team-back-btn" @onclick="GoBack" type="button">Back</button>
+        <div class="match-hero-score">
+          <div class="match-hero-team match-hero-home">
+            <img src="@(ev.StrHomeTeamBadge ?? "/images/teams/placeholder.png")" alt="@ev.StrHomeTeam" class="match-hero-badge" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
+            <span class="match-hero-team-name">@(ev.StrHomeTeam ?? "—")</span>
+          </div>
+          <div class="match-hero-vs">
+            @if (ev.IntHomeScore.HasValue && ev.IntAwayScore.HasValue)
+            {
+              <span class="match-hero-score-text">@ev.IntHomeScore – @ev.IntAwayScore</span>
+            }
+            else
+            {
+              <span class="match-hero-vs-text">vs</span>
+            }
+          </div>
+          <div class="match-hero-team match-hero-away">
+            <img src="@(ev.StrAwayTeamBadge ?? "/images/teams/placeholder.png")" alt="@ev.StrAwayTeam" class="match-hero-badge" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
+            <span class="match-hero-team-name">@(ev.StrAwayTeam ?? "—")</span>
+          </div>
+        </div>
+        <div class="match-hero-meta">
+          @if (!string.IsNullOrWhiteSpace(ev.StrLeague))
+          {
+            <span class="match-hero-league">@ev.StrLeague</span>
+          }
+          @if (!string.IsNullOrWhiteSpace(ev.StrRound))
+          {
+            <span class="match-hero-round">@ev.StrRound</span>
+          }
+          @if (!string.IsNullOrWhiteSpace(ev.StrStatus))
+          {
+            <span class="match-hero-status">@ev.StrStatus</span>
+          }
+          @if (ev.UtcDate.HasValue)
+          {
+            <span class="match-hero-date">@FormatMatchDate(ev.UtcDate.Value)</span>
+          }
+          @if (!string.IsNullOrWhiteSpace(ev.StrVenue))
+          {
+            <a href="/venue/@ev.IdVenue" class="match-hero-venue">@ev.StrVenue</a>
+          }
+        </div>
+      </div>
+    </div>
+
+    <div class="team-layout">
+      <div class="team-tabs">
+        <button class="team-tab @(_activeTab == "overview" ? "active" : "")" @onclick='() => _activeTab = "overview"'>
+          <img src="/images/teams/overview.png" alt="Overview" class="team-tab-icon" />
+          <span>Overview</span>
+        </button>
+        @if (_data.Timeline.Count > 0)
+        {
+          <button class="team-tab @(_activeTab == "timeline" ? "active" : "")" @onclick='() => _activeTab = "timeline"'>
+            <img src="/images/icons/football-pitch.png" alt="Timeline" class="team-tab-icon" />
+            <span>Timeline</span>
+          </button>
+        }
+        @if (_data.Lineup != null && (_data.Lineup.Home?.Players.Count > 0 || _data.Lineup.Away?.Players.Count > 0))
+        {
+          <button class="team-tab @(_activeTab == "lineups" ? "active" : "")" @onclick='() => _activeTab = "lineups"'>
+            <img src="/images/teams/soccer-player.png" alt="Lineups" class="team-tab-icon" />
+            <span>Lineups</span>
+          </button>
+        }
+        @if (_data.Stats.Count > 0)
+        {
+          <button class="team-tab @(_activeTab == "stats" ? "active" : "")" @onclick='() => _activeTab = "stats"'>
+            <img src="/images/teams/about.png" alt="Stats" class="team-tab-icon" />
+            <span>Stats</span>
+          </button>
+        }
+        @if (HasMedia(ev))
+        {
+          <button class="team-tab @(_activeTab == "media" ? "active" : "")" @onclick='() => _activeTab = "media"'>
+            <img src="/images/teams/media.png" alt="Media" class="team-tab-icon" />
+            <span>Media</span>
+          </button>
+        }
+        @if (_data.Tv.Count > 0 || !string.IsNullOrWhiteSpace(ev.StrFilename))
+        {
+          <button class="team-tab @(_activeTab == "tv" ? "active" : "")" @onclick='() => _activeTab = "tv"'>
+            <img src="/images/teams/tickets.png" alt="TV &amp; Info" class="team-tab-icon" />
+            <span>TV &amp; Info</span>
+          </button>
+        }
+      </div>
+
+      <div class="team-content">
+        @if (_activeTab == "overview")
+        {
+          <div class="team-tab-content">
+            <div class="team-info-row">
+              @if (!string.IsNullOrWhiteSpace(ev.StrLeague))
+              {
+                <div class="team-info-item">
+                  <span class="team-info-label">League</span>
+                  <span class="team-info-value">@ev.StrLeague</span>
+                </div>
+              }
+              @if (!string.IsNullOrWhiteSpace(ev.StrSeason))
+              {
+                <div class="team-info-item">
+                  <span class="team-info-label">Season</span>
+                  <span class="team-info-value">@ev.StrSeason</span>
+                </div>
+              }
+              @if (!string.IsNullOrWhiteSpace(ev.StrRound))
+              {
+                <div class="team-info-item">
+                  <span class="team-info-label">Round</span>
+                  <span class="team-info-value">@ev.StrRound</span>
+                </div>
+              }
+              @if (ev.UtcDate.HasValue)
+              {
+                <div class="team-info-item">
+                  <span class="team-info-label">Date &amp; time</span>
+                  <span class="team-info-value">@FormatMatchDate(ev.UtcDate.Value)</span>
+                </div>
+              }
+              @if (!string.IsNullOrWhiteSpace(ev.StrVenue))
+              {
+                <div class="team-info-item">
+                  <span class="team-info-label">Venue</span>
+                  <span class="team-info-value"><a href="/venue/@ev.IdVenue">@ev.StrVenue</a></span>
+                </div>
+              }
+              @if (!string.IsNullOrWhiteSpace(ev.StrResult))
+              {
+                <div class="team-info-item">
+                  <span class="team-info-label">Result</span>
+                  <span class="team-info-value">@ev.StrResult</span>
+                </div>
+              }
+            </div>
+            @if (_data.Highlights.Count > 0)
+            {
+              <div class="team-section-block">
+                <h3 class="team-block-title">Highlights</h3>
+                <div class="match-highlights-list">
+                  @foreach (var h in _data.Highlights)
+                  {
+                    var url = h.StrVideo ?? "";
+                    var thumb = h.StrThumb ?? "/images/teams/placeholder.png";
+                    var title = h.StrTitle ?? "Highlight";
+                    <a href="@url" target="_blank" rel="noopener noreferrer" class="match-highlight-card">
+                      <img src="@thumb" alt="@title" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
+                      <span class="match-highlight-title">@title</span>
+                    </a>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        }
+        else if (_activeTab == "timeline" && _data.Timeline.Count > 0)
+        {
+          <div class="team-tab-content">
+            <div class="team-section-block">
+              <h3 class="team-block-title">Timeline</h3>
+              <div class="match-timeline">
+                @foreach (var t in _data.Timeline)
+                {
+                  <div class="match-timeline-item match-timeline-@(t.StrTimeline?.ToLowerInvariant() ?? "event")">
+                    <span class="match-timeline-minute">@(t.StrTime)'</span>
+                    <span class="match-timeline-type">@(t.StrTimeline ?? "—")</span>
+                    <span class="match-timeline-player">@(t.StrPlayer ?? "—")</span>
+                    @if (!string.IsNullOrWhiteSpace(t.StrTeam))
+                    {
+                      <span class="match-timeline-team">@t.StrTeam</span>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(t.StrDetail))
+                    {
+                      <span class="match-timeline-detail">@t.StrDetail</span>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          </div>
+        }
+        else if (_activeTab == "lineups" && _data.Lineup != null)
+        {
+          <div class="team-tab-content">
+            <div class="team-section-block">
+              <h3 class="team-block-title">Lineups</h3>
+              <div class="match-lineups-grid">
+                <div class="match-lineup-col">
+                  <h4 class="match-lineup-team-name">@(_data.Lineup.Home?.StrTeam ?? ev.StrHomeTeam ?? "Home")</h4>
+                  @if (_data.Lineup.Home != null)
+                  {
+                    @foreach (var p in _data.Lineup.Home.Players)
+                    {
+                      <div class="match-lineup-player @(p.StrRole == "Substitute" ? "match-lineup-sub" : "")">
+                        <span class="match-lineup-num">@(p.StrNumber ?? "—")</span>
+                        <span class="match-lineup-pos">@(p.StrPosition ?? "—")</span>
+                        <span class="match-lineup-name">@(p.StrPlayer ?? "—")</span>
+                      </div>
+                    }
+                  }
+                </div>
+                <div class="match-lineup-col">
+                  <h4 class="match-lineup-team-name">@(_data.Lineup.Away?.StrTeam ?? ev.StrAwayTeam ?? "Away")</h4>
+                  @if (_data.Lineup.Away != null)
+                  {
+                    @foreach (var p in _data.Lineup.Away.Players)
+                    {
+                      <div class="match-lineup-player @(p.StrRole == "Substitute" ? "match-lineup-sub" : "")">
+                        <span class="match-lineup-num">@(p.StrNumber ?? "—")</span>
+                        <span class="match-lineup-pos">@(p.StrPosition ?? "—")</span>
+                        <span class="match-lineup-name">@(p.StrPlayer ?? "—")</span>
+                      </div>
+                    }
+                  }
+                </div>
+              </div>
+            </div>
+          </div>
+        }
+        else if (_activeTab == "stats" && _data.Stats.Count > 0)
+        {
+          <div class="team-tab-content">
+            <div class="team-section-block">
+              <h3 class="team-block-title">Statistics</h3>
+              <div class="match-stats-list">
+                @foreach (var s in _data.Stats)
+                {
+                  var total = (s.IntHome ?? 0) + (s.IntAway ?? 0);
+                  var homePct = total > 0 ? (s.IntHome ?? 0) * 100.0 / total : 50;
+                  <div class="match-stat-row">
+                    <span class="match-stat-home-val">@(s.IntHome ?? 0)</span>
+                    <div class="match-stat-bar-wrap">
+                      <div class="match-stat-bar match-stat-bar-home" style="width: @(homePct)%"></div>
+                      <div class="match-stat-bar match-stat-bar-away" style="width: @(100 - homePct)%"></div>
+                    </div>
+                    <span class="match-stat-away-val">@(s.IntAway ?? 0)</span>
+                  </div>
+                  <div class="match-stat-label">@(s.StrStat ?? "—")</div>
+                }
+              </div>
+            </div>
+          </div>
+        }
+        else if (_activeTab == "media" && HasMedia(ev))
+        {
+          <div class="team-tab-content">
+            <div class="team-section-block">
+              <h3 class="team-block-title">Media</h3>
+              <div class="match-media-grid">
+                @if (!string.IsNullOrWhiteSpace(ev.StrThumb))
+                {
+                  <img src="@ev.StrThumb" alt="Thumb" class="match-media-img" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none';" />
+                }
+                @if (!string.IsNullOrWhiteSpace(ev.StrBanner) && ev.StrBanner != ev.StrThumb)
+                {
+                  <img src="@ev.StrBanner" alt="Banner" class="match-media-img" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none';" />
+                }
+                @if (!string.IsNullOrWhiteSpace(ev.StrPoster) && ev.StrPoster != ev.StrThumb && ev.StrPoster != ev.StrBanner)
+                {
+                  <img src="@ev.StrPoster" alt="Poster" class="match-media-img" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none';" />
+                }
+                @if (!string.IsNullOrWhiteSpace(ev.StrFanart))
+                {
+                  <img src="@ev.StrFanart" alt="Fanart" class="match-media-img" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none';" />
+                }
+              </div>
+            </div>
+          </div>
+        }
+        else if (_activeTab == "tv")
+        {
+          <div class="team-tab-content">
+            <div class="team-section-block">
+              <h3 class="team-block-title">TV &amp; Info</h3>
+              @if (!string.IsNullOrWhiteSpace(ev.StrFilename))
+              {
+                <p class="match-filename"><strong>Event:</strong> @ev.StrFilename</p>
+              }
+              @if (_data.Tv.Count > 0)
+              {
+                <ul class="match-tv-list">
+                  @foreach (var tv in _data.Tv)
+                  {
+                    <li>@(tv.StrChannel ?? "—") @if (!string.IsNullOrWhiteSpace(tv.StrCountry)) { <span class="match-tv-country">(@tv.StrCountry)</span> }</li>
+                  }
+                </ul>
+              }
+              @if (string.IsNullOrWhiteSpace(ev.StrFilename) && _data.Tv.Count == 0)
+              {
+                <p class="small-muted">No TV or metadata available.</p>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+  }
+</div>
+
+@code {
+  [Parameter] public string? Id { get; set; }
+
+  private bool _loading = true;
+  private MatchDetailResponseDto? _data;
+  private string _activeTab = "overview";
+
+  protected override async Task OnParametersSetAsync()
+  {
+    _loading = true;
+    _data = null;
+    _activeTab = "overview";
+    try
+    {
+      if (string.IsNullOrWhiteSpace(Id)) return;
+      using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+      _data = await Api.GetMatchDetailAsync(Id!, cts.Token);
+    }
+    finally
+    {
+      _loading = false;
+    }
+  }
+
+  private void GoBack()
+  {
+    Nav.NavigateTo("/");
+  }
+
+  private static string FormatMatchDate(DateTime utc)
+  {
+    var local = utc.Kind == DateTimeKind.Utc ? utc.ToLocalTime() : utc;
+    return local.ToString("MMM d, yyyy • h:mm tt");
+  }
+
+  private static bool HasMedia(MatchDetailDto ev)
+  {
+    return !string.IsNullOrWhiteSpace(ev.StrThumb) || !string.IsNullOrWhiteSpace(ev.StrBanner)
+        || !string.IsNullOrWhiteSpace(ev.StrPoster) || !string.IsNullOrWhiteSpace(ev.StrFanart);
+  }
+}

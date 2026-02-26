@@ -1,19 +1,105 @@
-/* Venue detail page (uses team-* for shared layout) */
-.venue-hero{
-  min-height: 280px;
+/* Venue page: reuse team-page layout. Hero = one banner (thumb) + one content layer. */
+
+.venue-page .venue-hero {
+  min-height: 320px;
   background-size: cover !important;
   background-position: center !important;
   background-repeat: no-repeat !important;
 }
 
-.venue-hero .team-hero-info{
+/* Single content layer above the banner: logo, title, location, country */
+.venue-hero .team-hero-content {
+  justify-content: center;
+  align-items: center;
+}
+
+.venue-hero .team-back-btn {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+}
+
+.venue-hero .team-hero-info.venue-hero-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
+  gap: 10px;
+  max-width: 90%;
 }
 
-.venue-hero .team-hero-name{
-  text-shadow: 0 2px 12px rgba(0,0,0,0.5);
+.venue-hero-logo-wrap {
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(17, 24, 39, 0.72); /* dark glass, no blur */
+  border: 1px solid rgba(255,255,255,0.16);
+  box-shadow:
+    0 8px 24px rgba(0,0,0,0.28),
+    inset 0 1px 0 rgba(255,255,255,0.08);
+  flex-shrink: 0;
 }
 
-.venue-hero .team-hero-leagues{
-  text-shadow: 0 1px 6px rgba(0,0,0,0.4);
+.venue-hero .venue-hero-logo {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  display: block;
+}
+
+.venue-hero .venue-hero-logo {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.35));
+}
+
+.venue-hero .venue-hero-location {
+  margin: 0;
+  font-size: 15px;
+  color: rgba(255,255,255,0.95);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  font-weight: 500;
+}
+
+.venue-hero .venue-hero-country {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 5px 12px;
+  background: rgba(255,255,255,0.2);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255,255,255,0.35);
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+@media (max-width: 768px) {
+  .venue-page .venue-hero {
+    min-height: 280px;
+  }
+
+  .venue-hero .team-hero-content {
+    padding-top: 50px;
+  }
+
+  .venue-hero .venue-hero-logo {
+    width: 64px;
+    height: 64px;
+  }
+
+  .venue-hero .team-hero-name {
+    font-size: 22px;
+  }
+}
+
+/* Clickable match rows (link to match page) */
+.venue-page .team-match-row[role="button"] {
+  cursor: pointer;
+}
+
+.venue-page .team-match-row[role="button"]:hover {
+  background: rgba(255, 255, 255, 0.04);
 }

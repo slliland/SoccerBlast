@@ -9,6 +9,7 @@
 @inject BrowserTimeZone Tz
 @inject UserPrefsStore Prefs
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 @implements IDisposable
 
 <div class="sb-page all-page" @onclick="CloseOverlays">
@@ -73,7 +74,7 @@
     <!-- BODY -->
     <div class="sb-card sb-main">
 
-      <div class="section-head">
+      <div class="all-jump-bar section-head">
         <div class="all-header">
           <h4>All Matches</h4>
           <span class="small-muted">
@@ -96,8 +97,27 @@
 
             <div class="all-presets">
               <button class="btn btn-sm @(PresetKind() == "today" ? "active" : "")" @onclick="SetToday">Today</button>
+              <button class="btn btn-sm @(PresetKind() == "tomorrow" ? "active" : "")" @onclick="SetTomorrow">Tomorrow</button>
+              <button class="btn btn-sm @(PresetKind() == "yesterday" ? "active" : "")" @onclick="SetYesterday">Yesterday</button>
               <button class="btn btn-sm @(PresetKind() == "7d" ? "active" : "")" @onclick="Set7Days">7d</button>
               <button class="btn btn-sm @(PresetKind() == "30d" ? "active" : "")" @onclick="Set30Days">30d</button>
+            </div>
+          </div>
+
+          <div class="all-row all-jump-row">
+            <div class="all-inline-filter-wrap">
+              <button type="button" class="all-teams-filter-btn @(_inlineFilter.Length > 0 ? "active" : "")" @onclick="FocusTeamFilter" title="Filter by team or league">Teams</button>
+              <input type="text" class="sb-inline-filter"
+                     id="all-team-league-filter"
+                     placeholder="Filter by team or league…"
+                     value="@_inlineFilter"
+                     @oninput="OnInlineFilterInput" />
+            </div>
+            <div class="all-view-mode">
+              <span class="all-label">View</span>
+              <button type="button" class="btn btn-sm @(_viewMode == "day" ? "active" : "")" @onclick='() => _viewMode = "day"'>By Day</button>
+              <button type="button" class="btn btn-sm @(_viewMode == "league" ? "active" : "")" @onclick='() => _viewMode = "league"'>By League</button>
+              <button type="button" class="btn btn-sm @(_viewMode == "agenda" ? "active" : "")" @onclick='() => _viewMode = "agenda"'>Agenda</button>
             </div>
           </div>
 
@@ -183,28 +203,112 @@
       {
         <GlobalSpinner Message="Loading matches…" />
       }
-      else if (_items.Count == 0)
+      else if (VisibleMatches().Count == 0)
       {
-        <p class="small-muted">No matches in this range.</p>
+        <p class="small-muted">@(_items.Count > 0 ? "No matches for your followed teams in this range." : "No matches in this range.")</p>
       }
       else
       {
-        @foreach (var day in GroupByLocalDay(VisibleMatches()))
+        @if (_viewMode == "day" && (_endDate.DayNumber - _startDate.DayNumber + 1) >= 5)
+        {
+          <div class="all-date-nav-strip">
+            <span class="all-date-nav-title">Jump to date:</span>
+            @foreach (var d in GetDatesInRange())
+            {
+              var count = GetMatchCountForDate(d);
+              var isToday = d == DateOnly.FromDateTime(DateTime.Now);
+              var isActive = _activeJumpDate == d;
+              <button type="button"
+                      class="all-date-nav-chip @(isActive ? "active" : "") @(isToday ? "today" : "")"
+                      @onclick="() => JumpToDate(d)">
+                @d.ToString("ddd") @d.Day @d.ToString("MMM") (@count)
+              </button>
+            }
+          </div>
+        }
+        @if (_viewMode == "league")
+        {
+          var byLeague = GroupByCompetition(VisibleMatches());
+          @foreach (var comp in byLeague)
+          {
+            <div class="block">
+              <div class="block-title">@comp.Key · @comp.Value.Count matches</div>
+              @foreach (var m in comp.Value)
+              {
+                <div class="am-match">
+                  <div class="am-time">@FormatLocalTime(m.UtcDate)</div>
+                  <div class="am-team">
+                    <img class="am-crest" src="@(string.IsNullOrWhiteSpace(m.HomeTeamCrestUrl) ? "images/teams/placeholder.png" : m.HomeTeamCrestUrl)" alt="@m.HomeTeamName" loading="lazy" referrerpolicy="no-referrer" @onclick='() => Nav.NavigateTo($"/team/{m.HomeTeamId}")' style="cursor: pointer;" />
+                    <div class="am-name-row">
+                      <div class="am-name" @onclick='() => Nav.NavigateTo($"/team/{m.HomeTeamId}")' style="cursor: pointer;">@m.HomeTeamName</div>
+                      <button class="sb-likebtn @(IsLikedTeam(m.HomeTeamId) ? "liked" : "")" title="Like team" @onclick="() => ToggleLikeTeam(m.HomeTeamId, m.HomeTeamName, m.HomeTeamCrestUrl)" @onclick:stopPropagation="true"><img class="sb-likeimg" src="@TeamLikeIcon(m.HomeTeamId)" alt="like" /></button>
+                    </div>
+                  </div>
+                  <div class="am-team">
+                    <img class="am-crest" src="@(string.IsNullOrWhiteSpace(m.AwayTeamCrestUrl) ? "images/teams/placeholder.png" : m.AwayTeamCrestUrl)" alt="@m.AwayTeamName" loading="lazy" referrerpolicy="no-referrer" @onclick='() => Nav.NavigateTo($"/team/{m.AwayTeamId}")' style="cursor: pointer;" />
+                    <div class="am-name-row">
+                      <div class="am-name" @onclick='() => Nav.NavigateTo($"/team/{m.AwayTeamId}")' style="cursor: pointer;">@m.AwayTeamName</div>
+                      <button class="sb-likebtn @(IsLikedTeam(m.AwayTeamId) ? "liked" : "")" title="Like team" @onclick="() => ToggleLikeTeam(m.AwayTeamId, m.AwayTeamName, m.AwayTeamCrestUrl)" @onclick:stopPropagation="true"><img class="sb-likeimg" src="@TeamLikeIcon(m.AwayTeamId)" alt="like" /></button>
+                    </div>
+                  </div>
+                  <div class="am-right">
+                    <div class="am-score"><span class="num">@MatchDisplayHelper.FormatScore(m.HomeScore)</span><span class="sep">:</span><span class="num">@MatchDisplayHelper.FormatScore(m.AwayScore)</span></div>
+                    <div class="am-status @(MatchDisplayHelper.IsLiveStatus(m.Status) ? "live" : "")">@m.Status</div>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        }
+        else if (_viewMode == "agenda")
         {
           <div class="block">
-            <div class="block-title">
-              <span>@day.Key.ToString("MMM dd, yyyy")</span>
-              <span class="small-muted">@($"{day.Value.Count} matches")</span>
-            </div>
-
-            @foreach (var comp in GroupByCompetition(day.Value))
+            <div class="block-title">Chronological</div>
+            @foreach (var m in VisibleMatches())
             {
-              <div>
-                <div class="am-league-name">@comp.Key</div>
-
-                @foreach (var m in comp.Value)
+              <div class="am-match am-match-agenda">
+                <div class="am-time">@FormatLocalTime(m.UtcDate)</div>
+                <div class="am-agenda-meta">@(m.CompetitionName ?? "Other")</div>
+                <div class="am-team">
+                  <img class="am-crest" src="@(string.IsNullOrWhiteSpace(m.HomeTeamCrestUrl) ? "images/teams/placeholder.png" : m.HomeTeamCrestUrl)" alt="@m.HomeTeamName" loading="lazy" referrerpolicy="no-referrer" @onclick='() => Nav.NavigateTo($"/team/{m.HomeTeamId}")' style="cursor: pointer;" />
+                  <div class="am-name-row"><div class="am-name" @onclick='() => Nav.NavigateTo($"/team/{m.HomeTeamId}")' style="cursor: pointer;">@m.HomeTeamName</div></div>
+                </div>
+                <div class="am-team">
+                  <img class="am-crest" src="@(string.IsNullOrWhiteSpace(m.AwayTeamCrestUrl) ? "images/teams/placeholder.png" : m.AwayTeamCrestUrl)" alt="@m.AwayTeamName" loading="lazy" referrerpolicy="no-referrer" @onclick='() => Nav.NavigateTo($"/team/{m.AwayTeamId}")' style="cursor: pointer;" />
+                  <div class="am-name-row"><div class="am-name" @onclick='() => Nav.NavigateTo($"/team/{m.AwayTeamId}")' style="cursor: pointer;">@m.AwayTeamName</div></div>
+                </div>
+                <div class="am-right">
+                  @if (!string.IsNullOrWhiteSpace(m.ExternalId)) { <a href="/match/@m.ExternalId" class="am-score am-score-link"><span class="num">@MatchDisplayHelper.FormatScore(m.HomeScore)</span><span class="sep">:</span><span class="num">@MatchDisplayHelper.FormatScore(m.AwayScore)</span></a> } else { <div class="am-score"><span class="num">@MatchDisplayHelper.FormatScore(m.HomeScore)</span><span class="sep">:</span><span class="num">@MatchDisplayHelper.FormatScore(m.AwayScore)</span></div> }
+                  <div class="am-status @(MatchDisplayHelper.IsLiveStatus(m.Status) ? "live" : "")">@m.Status</div>
+                </div>
+              </div>
+            }
+          </div>
+        }
+        else
+        {
+          @foreach (var day in GroupByLocalDay(VisibleMatches()))
+          {
+            var isExpanded = _expandedDays.Contains(day.Key);
+            var leagueCount = day.Value.Select(m => m.CompetitionName ?? "Other").Distinct().Count();
+            <div class="block all-day-block" id="day-@day.Key.ToString("yyyy-MM-dd")">
+              <div class="block-title all-day-header @(isExpanded ? "expanded" : "")"
+                   @onclick="() => ToggleDayExpanded(day.Key)"
+                   style="cursor: pointer;">
+                <span>@day.Key.ToString("MMM dd, yyyy")</span>
+                <span class="small-muted">@day.Value.Count matches · @leagueCount leagues</span>
+                <span class="all-day-chevron">@(isExpanded ? "▼" : "▶")</span>
+              </div>
+              @if (isExpanded)
+              {
+                @foreach (var comp in GroupByCompetition(day.Value))
                 {
-                  <div class="am-match">
+                  <div>
+                    <div class="am-league-name">@comp.Key</div>
+
+                    @foreach (var m in comp.Value)
+                    {
+                      <div class="am-match">
                     <div class="am-time">@FormatLocalTime(m.UtcDate)</div>
 
                     <div class="am-team">
@@ -256,21 +360,24 @@
                     </div>
 
                     <div class="am-right">
-                      <div class="am-score">
-                        <span class="num">@MatchDisplayHelper.FormatScore(m.HomeScore)</span>
-                        <span class="sep">:</span>
-                        <span class="num">@MatchDisplayHelper.FormatScore(m.AwayScore)</span>
-                      </div>
+                      @if (!string.IsNullOrWhiteSpace(m.ExternalId)) { <a href="/match/@m.ExternalId" class="am-score am-score-link"><span class="num">@MatchDisplayHelper.FormatScore(m.HomeScore)</span><span class="sep">:</span><span class="num">@MatchDisplayHelper.FormatScore(m.AwayScore)</span></a> } else { <div class="am-score"><span class="num">@MatchDisplayHelper.FormatScore(m.HomeScore)</span><span class="sep">:</span><span class="num">@MatchDisplayHelper.FormatScore(m.AwayScore)</span></div> }
                       <div class="am-status @(MatchDisplayHelper.IsLiveStatus(m.Status) ? "live" : "")">@m.Status</div>
                     </div>
                   </div>
                 }
               </div>
             }
+              }
           </div>
         }
       }
+      }
     </div>
+
+    @if (_activeJumpDate != null)
+    {
+      <button type="button" class="all-back-to-top" @onclick="ScrollBackToTop" title="Back to top">Top</button>
+    }
   </div>
 </div>
 
@@ -306,37 +413,93 @@
   private string _selectedCompetitionName = ""; // "" = All
   private bool _showLeagueDropdown = false;
 
+  // sticky jump bar: inline filter, view mode, jump to date
+  private string _inlineFilter = "";
+  private string _viewMode = "day"; // day | league | agenda
+  /// <summary>When set, this date is "selected" in Jump to date (one chip active); when null, all chips inactive (e.g. after Back to top).</summary>
+  private DateOnly? _activeJumpDate;
+  private HashSet<DateOnly> _expandedDays = new();
+  private DateOnly? _scrollToDateAfterRender;
+  private bool _scrollListenerRegistered;
+  private DotNetObjectReference<All>? _dotNetRef;
+
   // reload
   private CancellationTokenSource? _reloadCts;
   private int _reloadSeq;
   private TimeZoneInfo? _tz;
 
+  protected override void OnInitialized()
+  {
+    Nav.LocationChanged += OnLocationChanged;
+  }
+
+  private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+  {
+    if (_hydrated && e.Location.Contains("/all", StringComparison.OrdinalIgnoreCase))
+      _ = InvokeAsync(Reload);
+  }
+
   protected override async Task OnAfterRenderAsync(bool firstRender)
   {
-    if (!firstRender) return;
-
-    _tzId = await Tz.GetTimeZoneIdAsync();
-    _tz = TimeZoneInfo.FindSystemTimeZoneById(_tzId);
-    Api.SetTimeZone(_tzId);
-
-    _prefs = await Prefs.GetAsync();
-    _prefs.FollowedTeamIds ??= new();
-
-    var today = DateOnly.FromDateTime(DateTime.Now);
-    _endDate = today;
-    _startDate = today.AddDays(-6);
-
-    _hydrated = true;
-    StateHasChanged();
-
-    // Initial load: just read from DB; auto-sync loop will refresh in background
-    await Reload();
-
-    // Start auto-sync loop (60 seconds)
-    _autoSyncLoop = new AutoSyncLoop(TimeSpan.FromSeconds(60), async _ => await AutoSyncTick());
-    if (_autoSyncEnabled)
+    if (firstRender)
     {
-      _autoSyncLoop.Start();
+      _tzId = await Tz.GetTimeZoneIdAsync();
+      _tz = TimeZoneInfo.FindSystemTimeZoneById(_tzId);
+      Api.SetTimeZone(_tzId);
+
+      _prefs = await Prefs.GetAsync();
+      _prefs.FollowedTeamIds ??= new();
+      EnsureFollowedTeamIdsFromInfo();
+
+      var today = DateOnly.FromDateTime(DateTime.Now);
+      _endDate = today;
+      _startDate = today.AddDays(-6);
+
+      _hydrated = true;
+      StateHasChanged();
+
+      await Reload();
+
+      _autoSyncLoop = new AutoSyncLoop(TimeSpan.FromSeconds(60), async _ => await AutoSyncTick());
+      if (_autoSyncEnabled)
+        _autoSyncLoop.Start();
+      return;
+    }
+
+    if (_scrollToDateAfterRender is { } date)
+    {
+      await JS.InvokeVoidAsync("soccerBlastScrollToDay", "day-" + date.ToString("yyyy-MM-dd"));
+      _scrollToDateAfterRender = null;
+      await InvokeAsync(StateHasChanged);
+    }
+
+    if (_activeJumpDate != null && !_scrollListenerRegistered)
+    {
+      _scrollListenerRegistered = true;
+      _dotNetRef ??= DotNetObjectReference.Create(this);
+      await JS.InvokeVoidAsync("soccerBlastRegisterScrollToTopListener", _dotNetRef);
+    }
+  }
+
+  [JSInvokable]
+  public void OnScrolledToTop()
+  {
+    _activeJumpDate = null;
+    _scrollListenerRegistered = false;
+    InvokeAsync(StateHasChanged);
+  }
+
+  /// <summary>Sync FollowedTeamIds from FollowedTeamsInfo so id-based filter works (e.g. after migration from name-based).</summary>
+  private void EnsureFollowedTeamIdsFromInfo()
+  {
+    if (_prefs.FollowedTeamsInfo == null) return;
+    var fromInfo = _prefs.FollowedTeamsInfo.Keys.Where(id => id != 0).ToHashSet();
+    if (fromInfo.Count == 0) return;
+    var current = _prefs.FollowedTeamIds ??= new List<int>();
+    var merged = current.Union(fromInfo).Where(id => id != 0).Distinct().ToList();
+    if (merged.Count != current.Count || merged.Except(current).Any())
+    {
+      _prefs.FollowedTeamIds = merged;
     }
   }
 
@@ -406,11 +569,13 @@
 
   public void Dispose()
   {
+    Nav.LocationChanged -= OnLocationChanged;
     _autoSyncLoop?.Dispose();
     _reloadCts?.Cancel();
     _reloadCts?.Dispose();
     _searchCts?.Cancel();
     _searchCts?.Dispose();
+    _dotNetRef?.Dispose();
   }
 
   private void OpenSearch() => _showSearch = true;
@@ -431,7 +596,8 @@
 
     try
     {
-      await Task.Delay(250, token);
+      // debounce: wait before calling API to avoid a request on every keystroke
+      await Task.Delay(400, token);
 
       if (_q.Trim().Length < 2)
       {
@@ -532,16 +698,85 @@
     await Reload();
   }
 
-  /// <summary>Returns "today", "7d", "30d" if current range matches that preset; otherwise null.</summary>
+  private async Task SetTomorrow()
+  {
+    var tomorrow = DateOnly.FromDateTime(DateTime.Now).AddDays(1);
+    _startDate = tomorrow;
+    _endDate = tomorrow;
+    await Reload();
+  }
+
+  private async Task SetYesterday()
+  {
+    var yesterday = DateOnly.FromDateTime(DateTime.Now).AddDays(-1);
+    _startDate = yesterday;
+    _endDate = yesterday;
+    await Reload();
+  }
+
+  /// <summary>Returns "today", "tomorrow", "yesterday", "7d", "30d" if current range matches that preset; otherwise null.</summary>
   private string? PresetKind()
   {
     var today = DateOnly.FromDateTime(DateTime.Now);
+    var tomorrow = today.AddDays(1);
+    var yesterday = today.AddDays(-1);
     var days = (_endDate.DayNumber - _startDate.DayNumber) + 1;
     if (_startDate == today && _endDate == today) return "today";
+    if (_startDate == tomorrow && _endDate == tomorrow) return "tomorrow";
+    if (_startDate == yesterday && _endDate == yesterday) return "yesterday";
     if (days == 7 && _endDate == today) return "7d";
     if (days == 30 && _endDate == today) return "30d";
     return null;
   }
+
+  private void JumpToDate(DateOnly d)
+  {
+    _expandedDays.Add(d);
+    _activeJumpDate = d;
+    _scrollToDateAfterRender = d;
+    StateHasChanged();
+  }
+
+  private async Task ScrollBackToTop()
+  {
+    await JS.InvokeVoidAsync("soccerBlastScrollToTop");
+    _activeJumpDate = null;
+    StateHasChanged();
+  }
+
+  private async Task FocusTeamFilter()
+  {
+    await JS.InvokeVoidAsync("eval", "document.getElementById('all-team-league-filter')?.focus()");
+  }
+
+  private void OnInlineFilterInput(ChangeEventArgs e)
+  {
+    _inlineFilter = e.Value?.ToString() ?? "";
+    StateHasChanged();
+  }
+
+  private void ToggleDayExpanded(DateOnly day)
+  {
+    if (_expandedDays.Contains(day))
+      _expandedDays.Remove(day);
+    else
+      _expandedDays.Add(day);
+    StateHasChanged();
+  }
+
+  private List<DateOnly> GetDatesInRange()
+  {
+    var list = new List<DateOnly>();
+    for (var d = _startDate; d <= _endDate; d = d.AddDays(1))
+      list.Add(d);
+    return list;
+  }
+
+  private int GetMatchCountForDate(DateOnly d)
+  {
+    return VisibleMatchesRaw().Count(m => DateOnly.FromDateTime(ConvertUtcToLocal(m.UtcDate)) == d);
+  }
+
 
   /// <summary>Filter matches to those whose local date (in user TZ) falls within [from, to].</summary>
   private List<MatchDto> FilterByRequestedRange(List<MatchDto> matches, DateOnly from, DateOnly to)
@@ -565,7 +800,6 @@
   {
     if (!_hydrated) return;
 
-    // snapshot current range
     var from = _startDate;
     var to = _endDate;
 
@@ -573,7 +807,6 @@
     _reloadCts?.Dispose();
     _reloadCts = new CancellationTokenSource();
     var ct = _reloadCts.Token;
-
     var mySeq = ++_reloadSeq;
 
     _loading = true;
@@ -582,37 +815,25 @@
 
     try
     {
-      EnsureRangeResult? ensured = null;
-
-      // only ensure when range touches recent window
-      if (IntersectsRecent(from, to, recentDays: 8))
-      {
-        ensured = await Api.EnsureRangeFreshAsync(
-          from, to,
-          hotMin: 5,
-          warmMin: 60,
-          coldMin: 43200,
-          ct: ct
-        );
-      }
-
-      // read from DB
+      // 1) Read from DB first so UI shows quickly (no blocking on sync)
       var rangeMatches = await Api.GetRangeAsync(from, to, competitionId: null, ct: ct);
-
-      // ignore stale result
       if (ct.IsCancellationRequested || mySeq != _reloadSeq) return;
 
       var inRange = FilterByRequestedRange(rangeMatches, from, to);
       _items.Clear();
       _items.AddRange(inRange);
-
+      var today = DateOnly.FromDateTime(DateTime.Now);
+      _expandedDays = new HashSet<DateOnly> { from <= today && today <= to ? today : from };
+      _activeJumpDate = null; // Enter page: no date selected, all Jump to date chips inactive
       _updatedLocal = ConvertUtcToLocal(DateTime.UtcNow);
-      var daySpan = (to.DayNumber - from.DayNumber) + 1;
+      _loading = false;
+      await InvokeAsync(StateHasChanged);
 
-      //if (ensured?.syncedMatches > 0)
-      //  _toast = $"Updated {_items.Count} matches ({daySpan} days) — synced {ensured.syncedMatches}.";
-      //else
-       // _toast = $"Loaded {_items.Count} matches ({daySpan} days).";
+      // 2) Ensure range fresh in background; then refetch and update so DB stays source of truth
+      if (IntersectsRecent(from, to, recentDays: 8))
+      {
+        _ = BackgroundEnsureAndRefreshAsync(from, to, mySeq);
+      }
     }
     catch (OperationCanceledException) { }
     catch (Exception ex)
@@ -622,14 +843,33 @@
     }
     finally
     {
-      if (!ct.IsCancellationRequested)
+      if (!ct.IsCancellationRequested && _loading)
       {
         _loading = false;
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
       }
     }
   }
 
+  private async Task BackgroundEnsureAndRefreshAsync(DateOnly from, DateOnly to, int forSeq)
+  {
+    try
+    {
+      await Api.EnsureRangeFreshAsync(from, to, hotMin: 5, warmMin: 60, coldMin: 43200);
+      if (forSeq != _reloadSeq) return;
+      var refreshed = await Api.GetRangeAsync(from, to, competitionId: null);
+      var refreshedInRange = FilterByRequestedRange(refreshed, from, to);
+      await InvokeAsync(async () =>
+      {
+        if (forSeq != _reloadSeq) return;
+        _items.Clear();
+        _items.AddRange(refreshedInRange);
+        _updatedLocal = ConvertUtcToLocal(DateTime.UtcNow);
+        StateHasChanged();
+      });
+    }
+    catch { /* background refresh best-effort */ }
+  }
 
   private sealed record LeagueOpt(string Name, int Count);
 
@@ -674,9 +914,9 @@
 
   private IEnumerable<MatchDto> ApplyBaseFilters(IEnumerable<MatchDto> src)
   {
-      if (_prefs.FollowedTeamsOnly && _prefs.FollowedTeamIds.Count > 0)
-          src = src.Where(m => _prefs.FollowedTeamIds.Contains(m.HomeTeamId) ||
-                              _prefs.FollowedTeamIds.Contains(m.AwayTeamId));
+      var followedIds = _prefs.FollowedTeamIds?.Where(id => id != 0).ToHashSet() ?? new HashSet<int>();
+      if (_prefs.FollowedTeamsOnly && followedIds.Count > 0)
+          src = src.Where(m => followedIds.Contains(m.HomeTeamId) || followedIds.Contains(m.AwayTeamId));
       return src;
   }
 
@@ -689,6 +929,15 @@
 
       if (!string.IsNullOrWhiteSpace(_selectedCompetitionName))
           q = q.Where(m => string.Equals(m.CompetitionName ?? "Other", _selectedCompetitionName, StringComparison.Ordinal));
+
+      if (!string.IsNullOrWhiteSpace(_inlineFilter))
+      {
+          var term = _inlineFilter.Trim();
+          q = q.Where(m =>
+              (m.CompetitionName ?? "").Contains(term, StringComparison.OrdinalIgnoreCase)
+              || (m.HomeTeamName ?? "").Contains(term, StringComparison.OrdinalIgnoreCase)
+              || (m.AwayTeamName ?? "").Contains(term, StringComparison.OrdinalIgnoreCase));
+      }
 
       return q.OrderBy(m => m.UtcDate).ToList();
   }
@@ -712,9 +961,14 @@
   private DateTime ConvertUtcToLocal(DateTime utc)
     => TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), _tz!);
 
+  private DateTime ConvertUtcToLocal(DateTimeOffset utc)
+    => ConvertUtcToLocal(utc.UtcDateTime);
+
 
   private string FormatLocalTime(DateTime utcDate)
     => ConvertUtcToLocal(utcDate).ToString("HH:mm");
+
+  private string FormatLocalTime(DateTimeOffset utcDate) => FormatLocalTime(utcDate.UtcDateTime);
 
   // Team like/unlike functionality
   private bool IsLikedTeam(int teamId) 

@@ -1,33 +1,76 @@
 @using SoccerBlast.Shared.Contracts
+@inject NavigationManager Nav
 
 <div class="team-match-row">
   <div class="team-match-meta">@MetaText</div>
 
   <div class="team-match-main">
-    <img class="team-match-crest"
-         src="@HomeCrest"
-         alt="@Match.HomeTeamName"
-         loading="lazy"
-         referrerpolicy="no-referrer"
-         onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
+    @if (Match.HomeTeamId > 0)
+    {
+      <a href="/team/@Match.HomeTeamId" class="team-match-crest-link">
+        <img class="team-match-crest"
+             src="@HomeCrest"
+             alt="@Match.HomeTeamName"
+             loading="lazy"
+             referrerpolicy="no-referrer"
+             onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
+      </a>
+      <a href="/team/@Match.HomeTeamId" class="team-match-team team-match-team-link">@Match.HomeTeamName</a>
+    }
+    else
+    {
+      <img class="team-match-crest"
+           src="@HomeCrest"
+           alt="@Match.HomeTeamName"
+           loading="lazy"
+           referrerpolicy="no-referrer"
+           onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
+      <span class="team-match-team" title="@Match.HomeTeamName">@Match.HomeTeamName</span>
+    }
 
-    <span class="team-match-team" title="@Match.HomeTeamName">@Match.HomeTeamName</span>
+    @if (!string.IsNullOrWhiteSpace(Match.ExternalId))
+    {
+      <a href="/match/@Match.ExternalId" class="team-match-score team-match-score-link">@ScoreText</a>
+    }
+    else
+    {
+      <span class="team-match-score">@ScoreText</span>
+    }
 
-    <span class="team-match-score">@ScoreText</span>
-
-    <span class="team-match-team" title="@Match.AwayTeamName">@Match.AwayTeamName</span>
-
-    <img class="team-match-crest"
-         src="@AwayCrest"
-         alt="@Match.AwayTeamName"
-         loading="lazy"
-         referrerpolicy="no-referrer"
-         onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
+    @if (Match.AwayTeamId > 0)
+    {
+      <a href="/team/@Match.AwayTeamId" class="team-match-team team-match-team-link">@Match.AwayTeamName</a>
+      <a href="/team/@Match.AwayTeamId" class="team-match-crest-link">
+        <img class="team-match-crest"
+             src="@AwayCrest"
+             alt="@Match.AwayTeamName"
+             loading="lazy"
+             referrerpolicy="no-referrer"
+             onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
+      </a>
+    }
+    else
+    {
+      <span class="team-match-team" title="@Match.AwayTeamName">@Match.AwayTeamName</span>
+      <img class="team-match-crest"
+           src="@AwayCrest"
+           alt="@Match.AwayTeamName"
+           loading="lazy"
+           referrerpolicy="no-referrer"
+           onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
+    }
   </div>
 
-<div class="team-match-comp">
-  <span class="team-match-comp-name">@(!string.IsNullOrWhiteSpace(Match.CompetitionName) ? Match.CompetitionName : "—missing—")</span>
-</div>
+  <div class="team-match-comp">
+    @if (Match.CompetitionId > 0)
+    {
+      <a href="/competition/@Match.CompetitionId" class="team-match-comp-name team-match-comp-link">@(!string.IsNullOrWhiteSpace(Match.CompetitionName) ? Match.CompetitionName : "—")</a>
+    }
+    else
+    {
+      <span class="team-match-comp-name">@(!string.IsNullOrWhiteSpace(Match.CompetitionName) ? Match.CompetitionName : "—missing—")</span>
+    }
+  </div>
 </div>
 
 @code {
@@ -47,7 +90,8 @@
     get
     {
       var tz = TimeZoneInfo.FindSystemTimeZoneById(TimeZoneId);
-      var local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(Match.UtcDate, DateTimeKind.Utc), tz);
+      var utc = Match.UtcDate.UtcDateTime;
+      var local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), tz);
       return local.ToString("MMM d, yyyy • h:mm tt");
     }
   }

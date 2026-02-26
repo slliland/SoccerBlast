@@ -2,11 +2,12 @@
 @rendermode RenderMode.InteractiveServer
 @using Microsoft.AspNetCore.Components.Web
 @using SoccerBlast.Shared.Contracts
+@using SoccerBlast.Web.Helpers
 @inject SoccerBlast.Web.Services.SoccerApiClient Api
 @inject NavigationManager Nav
 @inject IJSRuntime JSRuntime
 
-<div class="team-page">
+<div class="team-page venue-page">
   @if (_loading)
   {
     <div class="team-loading">
@@ -22,41 +23,61 @@
   }
   else
   {
-    <div class="team-hero venue-hero" style="background-image: url('@(_venue.ImageUrl ?? "images/teams/stadium-cenit-view-.png")')">
+    var heroBanner = _venue.ThumbUrl ?? _venue.FanartUrls?.FirstOrDefault() ?? _venue.ImageUrl ?? "images/teams/stadium-cenit-view-.png";
+    var heroLogo = _venue.LogoUrl ?? _venue.ThumbUrl ?? "images/teams/arena.png";
+    <div class="team-hero venue-hero" style="background-image: url('@heroBanner')">
       <div class="team-hero-overlay"></div>
       <div class="team-hero-content">
         <button class="team-back-btn" @onclick="GoBack" type="button">Back</button>
-
-        <div class="team-hero-info">
+        <div class="team-hero-info venue-hero-info">
+          <div class="venue-hero-logo-wrap">
+            <img class="venue-hero-logo" src="@heroLogo" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/arena.png';" />
+          </div>
           <h1 class="team-hero-name">@_venue.Name</h1>
-          @if (!string.IsNullOrWhiteSpace(_venue.City) || !string.IsNullOrWhiteSpace(_venue.Country))
+          @if (!string.IsNullOrWhiteSpace(_venue.City))
           {
-            <p class="team-hero-leagues">@string.Join(", ", new[]{_venue.City, _venue.Country}.Where(s => !string.IsNullOrWhiteSpace(s)))</p>
+            <p class="venue-hero-location">@_venue.City</p>
+          }
+          @if (!string.IsNullOrWhiteSpace(_venue.Country))
+          {
+            var flag = CountryFlagHelper.CountryFlag(_venue.Country);
+            <span class="venue-hero-country">@if (!string.IsNullOrEmpty(flag)) { @flag<text> </text> } @_venue.Country</span>
           }
         </div>
       </div>
     </div>
 
     <div class="team-layout">
+      <div class="team-tabs">
+        <button class="team-tab @(_activeTab == "overview" ? "active" : "")" @onclick="ActivateOverviewAsync">
+          <img src="/images/teams/overview.png" alt="Overview" class="team-tab-icon" />
+          <span>Overview</span>
+        </button>
+        <button class="team-tab @(_activeTab == "matches" ? "active" : "")" @onclick='() => _activeTab = "matches"'>
+          <img src="/images/teams/tickets.png" alt="Matches" class="team-tab-icon" />
+          <span>Matches</span>
+        </button>
+        @if (_venue.FanartUrls?.Count > 0)
+        {
+          <button class="team-tab @(_activeTab == "gallery" ? "active" : "")" @onclick='() => _activeTab = "gallery"'>
+            <img src="/images/teams/media.png" alt="Gallery" class="team-tab-icon" />
+            <span>Gallery</span>
+          </button>
+        }
+        @if (!string.IsNullOrWhiteSpace(_venue.Description))
+        {
+          <button class="team-tab @(_activeTab == "about" ? "active" : "")" @onclick='() => _activeTab = "about"'>
+            <img src="/images/teams/about.png" alt="About" class="team-tab-icon" />
+            <span>About</span>
+          </button>
+        }
+      </div>
+
       <div class="team-content">
-        <div class="team-tab-content">
-          <div class="team-section-block">
-            <h3 class="team-block-title">Venue Details</h3>
+        @if (_activeTab == "overview")
+        {
+          <div class="team-tab-content">
             <div class="team-info-row">
-              @if (!string.IsNullOrWhiteSpace(_venue.City))
-              {
-                <div class="team-info-item">
-                  <span class="team-info-label">City</span>
-                  <span class="team-info-value">@_venue.City</span>
-                </div>
-              }
-              @if (!string.IsNullOrWhiteSpace(_venue.Country))
-              {
-                <div class="team-info-item">
-                  <span class="team-info-label">Country</span>
-                  <span class="team-info-value">@_venue.Country</span>
-                </div>
-              }
               @if (_venue.Capacity.HasValue)
               {
                 <div class="team-info-item">
@@ -64,9 +85,169 @@
                   <span class="team-info-value">@_venue.Capacity.Value.ToString("N0")</span>
                 </div>
               }
+              @if (!string.IsNullOrWhiteSpace(_venue.Cost))
+              {
+                <div class="team-info-item">
+                  <span class="team-info-label">Build cost</span>
+                  <span class="team-info-value">@_venue.Cost</span>
+                </div>
+              }
+              @if (_venue.FormedYear.HasValue)
+              {
+                var yearsOpen = DateTime.UtcNow.Year - _venue.FormedYear.Value;
+                var yearsLabel = yearsOpen == 1 ? "1 year" : $"{yearsOpen} years";
+                <div class="team-info-item">
+                  <span class="team-info-label">Opened (@yearsLabel)</span>
+                  <span class="team-info-value">@_venue.FormedYear</span>
+                </div>
+              }
+              @if (!string.IsNullOrWhiteSpace(_venue.City))
+              {
+                <div class="team-info-item">
+                  <span class="team-info-label">Location</span>
+                  <span class="team-info-value">@_venue.City</span>
+                </div>
+              }
+            </div>
+            @if (_tenants.Count > 0)
+            {
+              <div class="team-section-block">
+                <h3 class="team-block-title">Tenants</h3>
+                <div class="team-leagues-grid">
+                  @foreach (var t in _tenants)
+                  {
+                    var crest = !string.IsNullOrWhiteSpace(t.BadgeUrl) ? t.BadgeUrl : "/images/teams/placeholder.png";
+                    <div class="team-league-item">
+                      <img src="@crest" alt="@t.Name" class="team-league-icon" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
+                      <span class="team-league-name">@t.Name</span>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+            @if ((_venue.Latitude.HasValue && _venue.Longitude.HasValue) || !string.IsNullOrWhiteSpace(_venue.MapCoordinates))
+            {
+              <LocationMap MapElementId="venue-map" Latitude="@_venue.Latitude" Longitude="@_venue.Longitude" MapCoordinates="@_venue.MapCoordinates" Country="@_venue.Country" VenueName="@_venue.Name" />
+            }
+            @if (!string.IsNullOrWhiteSpace(_venue.Website))
+            {
+              <div class="team-section-block">
+                <h3 class="team-block-title">Website</h3>
+                <div class="team-social-links">
+                  <a href="@GetWebsiteHref(_venue.Website)" target="_blank" rel="noopener noreferrer" class="team-social-link">Visit website</a>
+                </div>
+              </div>
+            }
+          </div>
+        }
+        else if (_activeTab == "matches")
+        {
+          <div class="team-tab-content">
+            <div class="team-section-block">
+              <h3 class="team-block-title">Upcoming at this venue</h3>
+              @if (_upcoming.Count == 0)
+              {
+                <div class="team-empty"><p class="small-muted">No upcoming events.</p></div>
+              }
+              else
+              {
+                <div class="team-matches-list">
+                  @foreach (var ev in _upcoming)
+                  {
+                    <div class="team-match-row" @onclick="() => OpenMatch(ev.IdEvent)" role="button" tabindex="0">
+                      <div class="team-match-meta">@FormatEventDate(ev)</div>
+                      <div class="team-match-main">
+                        <img class="team-match-crest" src="@(ev.HomeTeamBadge ?? "/images/teams/placeholder.png")" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
+                        <span class="team-match-team" title="@ev.HomeTeamName">@ev.HomeTeamName</span>
+                        <span class="team-match-score">vs</span>
+                        <span class="team-match-team" title="@ev.AwayTeamName">@ev.AwayTeamName</span>
+                        <img class="team-match-crest" src="@(ev.AwayTeamBadge ?? "/images/teams/placeholder.png")" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
+                      </div>
+                      <div class="team-match-comp">
+                        <span class="team-match-comp-name">@(ev.LeagueName ?? "—")</span>
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+            <div class="team-section-block">
+              <h3 class="team-block-title">Recent at this venue</h3>
+              @if (_recent.Count == 0)
+              {
+                <div class="team-empty"><p class="small-muted">No recent results.</p></div>
+              }
+              else
+              {
+                <div class="team-matches-list">
+                  @foreach (var ev in _recent)
+                  {
+                    <div class="team-match-row" @onclick="() => OpenMatch(ev.IdEvent)" role="button" tabindex="0">
+                      <div class="team-match-meta">@FormatEventDate(ev)</div>
+                      <div class="team-match-main">
+                        <img class="team-match-crest" src="@(ev.HomeTeamBadge ?? "/images/teams/placeholder.png")" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
+                        <span class="team-match-team" title="@ev.HomeTeamName">@ev.HomeTeamName</span>
+                        <span class="team-match-score">@(ev.HomeScore?.ToString() ?? "–")–@(ev.AwayScore?.ToString() ?? "–")</span>
+                        <span class="team-match-team" title="@ev.AwayTeamName">@ev.AwayTeamName</span>
+                        <img class="team-match-crest" src="@(ev.AwayTeamBadge ?? "/images/teams/placeholder.png")" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
+                      </div>
+                      <div class="team-match-comp">
+                        <span class="team-match-comp-name">@(ev.LeagueName ?? "—")</span>
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
             </div>
           </div>
-        </div>
+        }
+        else if (_activeTab == "gallery" && _venue.FanartUrls?.Count > 0)
+        {
+          <div class="team-tab-content">
+            <div class="team-section-block">
+              <h3 class="team-block-title">Gallery</h3>
+              <div class="sb-gallery-grid">
+                @for (var i = 0; i < _venue.FanartUrls.Count; i++)
+                {
+                  var url = _venue.FanartUrls[i];
+                  <img src="@url"
+                       alt="@_venue.Name gallery"
+                       class="sb-gallery-img"
+                       loading="lazy"
+                       referrerpolicy="no-referrer"
+                       onerror="this.style.display='none';"
+                       @onclick="() => OpenVenueGallery(i)" />
+                }
+              </div>
+            </div>
+          </div>
+        }
+        else if (_activeTab == "about" && !string.IsNullOrWhiteSpace(_venue.Description))
+        {
+          <div class="team-tab-content">
+            <div class="team-section-block team-stadium-description">
+              <h3 class="team-block-title">About</h3>
+              <p class="team-stadium-description-text">@_venue.Description</p>
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  @if (_isGalleryOpen && _galleryUrls != null && _galleryUrls.Count > 0)
+  {
+    <div class="sb-gallery-overlay" @onclick="CloseGallery">
+      <div class="sb-gallery-modal" @onclick:stopPropagation="true">
+        <button type="button" class="sb-gallery-close" @onclick="CloseGallery" aria-label="Close gallery">×</button>
+        <button type="button" class="sb-gallery-nav sb-gallery-nav-prev" @onclick="PrevGalleryImage" aria-label="Previous image">‹</button>
+        <img src="@_galleryUrls[_activeGalleryIndex]"
+             alt="Gallery"
+             class="sb-gallery-img"
+             loading="lazy"
+             referrerpolicy="no-referrer"
+             onerror="this.style.display='none';" />
+        <button type="button" class="sb-gallery-nav sb-gallery-nav-next" @onclick="NextGalleryImage" aria-label="Next image">›</button>
       </div>
     </div>
   }
@@ -77,17 +258,54 @@
 
   private bool _loading = true;
   private VenueDetailDto? _venue;
+  private List<VenueEventDto> _upcoming = new();
+  private List<VenueEventDto> _recent = new();
+  private List<VenueTenant> _tenants = new();
+  private string _activeTab = "overview";
+
+  private async Task ActivateOverviewAsync()
+  {
+    _activeTab = "overview";
+    await Task.Yield();
+    try { await JSRuntime.InvokeVoidAsync("soccerBlastMaps.resizeVenueMap", "venue-map"); } catch { }
+  }
+
+  private void OpenMatch(string? idEvent)
+  {
+    if (!string.IsNullOrWhiteSpace(idEvent)) Nav.NavigateTo("/match/" + idEvent);
+  }
+
+  private bool _isGalleryOpen;
+  private int _activeGalleryIndex;
+  private List<string>? _galleryUrls;
 
   protected override async Task OnParametersSetAsync()
   {
     _loading = true;
     _venue = null;
+    _upcoming = new();
+    _recent = new();
+    _tenants = new();
+    _activeTab = "overview";
 
     try
     {
       if (string.IsNullOrWhiteSpace(Id)) return;
-      using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-      _venue = await Api.GetVenueAsync(Id!, cts.Token);
+      using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+      var token = cts.Token;
+      _venue = await Api.GetVenueAsync(Id!, token);
+      if (_venue == null) return;
+
+      var venueId = _venue.ExternalId ?? Id;
+      if (!string.IsNullOrWhiteSpace(venueId))
+      {
+        var upTask = Api.GetVenueUpcomingAsync(venueId, token);
+        var recentTask = Api.GetVenueRecentAsync(venueId, token);
+        await Task.WhenAll(upTask, recentTask);
+        _upcoming = await upTask;
+        _recent = await recentTask;
+        await InferTenantsAsync(token);
+      }
     }
     catch
     {
@@ -97,6 +315,97 @@
     {
       _loading = false;
     }
+  }
+
+  private async Task InferTenantsAsync(CancellationToken ct)
+  {
+    if (_venue == null) return;
+    var venueName = NormalizeStadiumName(_venue.Name);
+    if (string.IsNullOrEmpty(venueName)) return;
+
+    var candidates = new Dictionary<string, (string Name, string? Badge)>(StringComparer.OrdinalIgnoreCase);
+    foreach (var e in _upcoming.Concat(_recent))
+    {
+      var id = e.HomeTeamId?.Trim();
+      var name = e.HomeTeamName?.Trim();
+      if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(name)) continue;
+      if (!candidates.ContainsKey(id))
+        candidates[id] = (name, string.IsNullOrWhiteSpace(e.HomeTeamBadge) ? null : e.HomeTeamBadge.Trim());
+    }
+
+    var verified = new List<VenueTenant>();
+    foreach (var (teamId, (name, eventBadge)) in candidates.Take(20))
+    {
+      try
+      {
+        var team = await Api.GetTeamAsync(teamId, ct);
+        var teamStadium = NormalizeStadiumName(team?.Profile?.StadiumName);
+        if (string.IsNullOrEmpty(teamStadium) || !string.Equals(venueName, teamStadium, StringComparison.OrdinalIgnoreCase))
+          continue;
+        var crest = !string.IsNullOrWhiteSpace(team?.CrestUrl) ? team.CrestUrl : eventBadge;
+        verified.Add(new VenueTenant(team?.Name ?? name, string.IsNullOrWhiteSpace(crest) ? null : crest));
+      }
+      catch
+      {
+        // Skip this candidate on error (e.g. team not found, timeout)
+      }
+    }
+    _tenants = verified.OrderBy(x => x.Name).Take(12).ToList();
+  }
+
+  private static string NormalizeStadiumName(string? s)
+  {
+    if (string.IsNullOrWhiteSpace(s)) return "";
+    s = s.Trim();
+    return System.Text.RegularExpressions.Regex.Replace(s, @"\s+", " ");
+  }
+
+  private sealed record VenueTenant(string Name, string? BadgeUrl);
+
+  private string FormatEventDate(VenueEventDto ev)
+  {
+    if (!ev.UtcDate.HasValue) return ev.DateEvent ?? "—";
+    try
+    {
+      var tz = TimeZoneInfo.FindSystemTimeZoneById(Api.TimeZoneId);
+      var local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(ev.UtcDate.Value, DateTimeKind.Utc), tz);
+      return local.ToString("MMM d, yyyy • h:mm tt");
+    }
+    catch
+    {
+      return ev.UtcDate.Value.ToString("MMM d, HH:mm");
+    }
+  }
+
+  private void OpenVenueGallery(int index)
+  {
+    if (_venue?.FanartUrls == null || _venue.FanartUrls.Count == 0) return;
+    _galleryUrls = _venue.FanartUrls;
+    _activeGalleryIndex = Math.Clamp(index, 0, _venue.FanartUrls.Count - 1);
+    _isGalleryOpen = true;
+  }
+
+  private void CloseGallery() => _isGalleryOpen = false;
+
+  private void NextGalleryImage()
+  {
+    if (_galleryUrls == null || _galleryUrls.Count == 0) return;
+    _activeGalleryIndex = (_activeGalleryIndex + 1) % _galleryUrls.Count;
+  }
+
+  private void PrevGalleryImage()
+  {
+    if (_galleryUrls == null || _galleryUrls.Count == 0) return;
+    _activeGalleryIndex = _activeGalleryIndex == 0 ? _galleryUrls.Count - 1 : _activeGalleryIndex - 1;
+  }
+
+  private static string GetWebsiteHref(string? website)
+  {
+    if (string.IsNullOrWhiteSpace(website)) return "#";
+    var u = website.Trim();
+    if (u.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || u.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+      return u;
+    return "https://" + u.TrimStart('/');
   }
 
   private async Task GoBack()
@@ -111,4 +420,3 @@
     }
   }
 }
-

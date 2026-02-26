@@ -248,6 +248,8 @@ else
  private static DateTime AsUtc(DateTime dt)
     => dt.Kind == DateTimeKind.Utc ? dt : DateTime.SpecifyKind(dt, DateTimeKind.Utc);
 
+  private static DateTime AsUtc(DateTimeOffset d) => d.UtcDateTime;
+
   private void BuildSections()
   {
       NextEvent = null;

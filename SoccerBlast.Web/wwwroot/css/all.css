@@ -173,23 +173,293 @@
   border-radius: 10px;
 }
 
+/* Sticky jump bar — theme-aligned */
+.all-jump-bar{
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--am-card, #fff);
+  padding-bottom: 14px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--am-line);
+}
+
+.all-jump-row{
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+
+.all-jump-date{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Native select: remove default look so theme applies */
+.all-page .sb-date-jump-select{
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 10px 36px 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--am-text);
+  border: 1px solid var(--am-line);
+  border-radius: 12px;
+  background: var(--am-card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 12px center;
+  background-size: 12px;
+  min-width: 200px;
+  cursor: pointer;
+  transition: border-color .2s ease, box-shadow .2s ease;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.04);
+}
+
+.all-page .sb-date-jump-select:hover{
+  border-color: rgba(245,158,11,.35);
+}
+
+.all-page .sb-date-jump-select:focus{
+  outline: none;
+  border-color: var(--am-brand);
+  box-shadow: 0 0 0 3px rgba(245,158,11,.15);
+}
+
+.all-inline-filter-wrap{
+  flex: 1;
+  min-width: 180px;
+}
+
+.all-page .sb-inline-filter{
+  width: 100%;
+  max-width: 280px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  border: 1px solid var(--am-line);
+  border-radius: 12px;
+  background: var(--am-card);
+  color: var(--am-text);
+  transition: border-color .2s ease, box-shadow .2s ease;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.04);
+}
+
+.all-page .sb-inline-filter::placeholder{
+  color: var(--am-muted);
+}
+
+.all-page .sb-inline-filter:hover{
+  border-color: var(--am-muted);
+}
+
+.all-page .sb-inline-filter:focus{
+  outline: none;
+  border-color: var(--am-brand);
+  box-shadow: 0 0 0 3px rgba(245,158,11,.15);
+}
+
+/* Teams filter button (focuses the team/league filter input) */
+.all-page .all-inline-filter-wrap{
+  flex: 1;
+  min-width: 180px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.all-page .all-teams-filter-btn{
+  flex-shrink: 0;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--am-line);
+  border-radius: 12px;
+  background: var(--am-card);
+  color: var(--am-text);
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
+}
+
+.all-page .all-teams-filter-btn:hover{
+  border-color: rgba(245,158,11,.45);
+  background: rgba(245,158,11,0.06);
+  color: var(--am-brand);
+}
+
+.all-page .all-teams-filter-btn.active{
+  background: rgba(245,158,11,0.12);
+  border-color: var(--am-brand);
+  color: var(--am-brand);
+}
+
+.all-view-mode{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.all-page .all-view-mode .btn{
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 10px;
+  transition: all .15s ease;
+  border: 1px solid var(--am-line);
+  background: var(--am-card);
+  color: var(--am-text);
+}
+
+.all-page .all-view-mode .btn:hover{
+  border-color: rgba(245,158,11,.45);
+  background: rgba(245,158,11,0.06);
+  color: var(--am-brand);
+}
+
+.all-page .all-view-mode .btn.active{
+  background: rgba(245,158,11,0.12);
+  border-color: var(--am-brand);
+  color: var(--am-brand);
+  font-weight: 700;
+}
+
+/* Collapsible day blocks */
+.all-day-block{
+  margin-top: 12px;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(17,24,39,.04);
+}
+
+.all-day-header{
+  user-select: none;
+  transition: background .15s ease;
+}
+
+.all-day-header:hover{
+  background: rgba(245,158,11,0.06) !important;
+}
+
+.all-day-chevron{
+  font-size: 10px;
+  color: var(--am-muted);
+  margin-left: 8px;
+  opacity: .9;
+}
+
+/* Date navigator strip (horizontal chips when 5+ days in range) */
+.all-page .all-date-nav-strip{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--am-line);
+}
+
+.all-page .all-date-nav-strip .all-date-nav-title{
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--am-muted);
+  margin-right: 4px;
+}
+
+.all-page .all-date-nav-chip{
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--am-line);
+  border-radius: 999px;
+  background: var(--am-card);
+  color: var(--am-text);
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
+  box-shadow: 0 1px 2px rgba(17,24,39,.04);
+}
+
+.all-page .all-date-nav-chip:hover{
+  border-color: rgba(245,158,11,.45);
+  background: rgba(245,158,11,0.06);
+}
+
+.all-page .all-date-nav-chip.active{
+  background: rgba(245,158,11,0.12);
+  border-color: var(--am-brand);
+  color: var(--am-brand);
+  font-weight: 700;
+}
+
+.all-page .all-date-nav-chip.today{
+  border-left: 3px solid var(--am-brand);
+  padding-left: 11px;
+}
+
+/* Back to top floating button — left side, near page area, does not overlap match card */
+.all-back-to-top{
+  position: fixed;
+  bottom: 28px;
+  left: 280px;
+  z-index: 9999;
+  padding: 16px 28px;
+  font-size: 16px;
+  font-weight: 800;
+  border: 2px solid var(--am-line);
+  border-radius: 14px;
+  background: var(--am-card);
+  color: var(--am-text);
+  cursor: pointer;
+  box-shadow: 0 6px 24px rgba(17,24,39,.15);
+  transition: background .15s ease, border-color .15s ease, transform .15s ease;
+  min-height: 52px;
+}
+
+.all-back-to-top:hover{
+  background: rgba(245,158,11,0.12);
+  border-color: var(--am-brand);
+  color: var(--am-brand);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px rgba(17,24,39,.18);
+}
+
+/* Agenda view: compact match row */
+.am-match-agenda{
+  grid-template-columns: 56px 110px minmax(80px, 1fr) minmax(80px, 1fr) 120px;
+}
+
+.am-agenda-meta{
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--am-muted);
+  letter-spacing: .02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  grid-column: 2;
+}
+
 .block{
   margin-top: 14px;
   border: 1px solid var(--am-line);
   border-radius: 14px;
   overflow: hidden;
+  background: var(--am-card);
+  box-shadow: 0 2px 12px rgba(17,24,39,.04);
 }
 
 .block-title{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  padding:10px 12px;
-  background:#fafafa;
-  border-bottom:1px solid var(--am-line);
-  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--am-bg);
+  border-bottom: 1px solid var(--am-line);
+  font-weight: 800;
   font-size: 13px;
   color: var(--am-text);
+  letter-spacing: .01em;
 }
 
 .am-match{
@@ -254,6 +524,28 @@
   -webkit-line-clamp: 2;
   overflow: hidden;
   word-break: break-word;
+}
+
+a.am-name{
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+a.am-name:hover{
+  color: var(--sb-accent, #f59e0b);
+  text-decoration: underline;
+}
+
+.am-score-link{
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.am-score-link:hover{
+  color: var(--sb-accent, #f59e0b);
 }
 
 /* Like button base */
@@ -530,11 +822,26 @@
 
 /* Same active style as dashboard .sb-list button.active — Today / 7d / 30d (theme color) */
 .btn.active,
-.all-presets .btn.active{
+.all-presets .btn.active,
+.all-page .all-presets .btn.active{
   background: var(--brand-tint-strong, rgba(245,158,11,0.12));
   border-color: var(--brand, #f59e0b);
   color: var(--brand, #f59e0b);
-  font-weight: 600;
+  font-weight: 700;
+}
+
+/* All page: force preset and form controls to use theme (beat Bootstrap) */
+.all-page .all-presets .btn{
+  border: 1px solid var(--am-line);
+  background: var(--am-card);
+  color: var(--am-text);
+  border-radius: 12px;
+}
+
+.all-page .all-presets .btn:hover:not(:disabled){
+  border-color: rgba(245,158,11,.45);
+  background: rgba(245,158,11,0.06);
+  color: var(--am-brand);
 }
 
 /* Toggle switch */

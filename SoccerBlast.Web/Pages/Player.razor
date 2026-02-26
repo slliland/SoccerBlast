@@ -2,6 +2,7 @@
 @rendermode RenderMode.InteractiveServer
 @using Microsoft.AspNetCore.Components.Web
 @using SoccerBlast.Shared.Contracts
+@using SoccerBlast.Web.Helpers
 @inject SoccerBlast.Web.Services.SoccerApiClient Api
 @inject NavigationManager Nav
 @inject IJSRuntime JSRuntime
@@ -22,19 +23,21 @@
   }
   else
   {
-    <div class="team-hero player-hero">
+    <div class="team-hero player-hero" style="background-image: url('@(string.IsNullOrWhiteSpace(_player.BannerUrl) ? "/images/banner/player-banner.jpg" : _player.BannerUrl)');">
       <div class="team-hero-overlay"></div>
       <div class="team-hero-content">
         <button class="team-back-btn" @onclick="GoBack" type="button">Back</button>
 
         <div class="team-hero-info player-hero-info">
-          <img class="player-hero-photo"
-               src="@(_player.PhotoUrl ?? "/images/icons/soccer-player.png")"
-               alt="@_player.Name"
-               loading="lazy"
-               referrerpolicy="no-referrer"
-               onerror="this.onerror=null; this.src='/images/icons/soccer-player.png';" />
-
+          <div class="player-hero-photo-wrap @(IsPlayerStatusActive(_player.Status) ? "player-hero-status-active" : "player-hero-status-inactive")">
+            <img class="player-hero-photo"
+                 src="@(_player.PhotoUrl ?? "/images/icons/soccer-player.png")"
+                 alt="@_player.Name"
+                 loading="lazy"
+                 referrerpolicy="no-referrer"
+                 onerror="this.onerror=null; this.src='/images/icons/soccer-player.png';" />
+            <span class="player-hero-status-tag">@(IsPlayerStatusActive(_player.Status) ? "Active" : (string.IsNullOrWhiteSpace(_player.Status) ? "—" : _player.Status))</span>
+          </div>
           <div>
             <h1 class="team-hero-name">@_player.Name</h1>
             <div class="player-hero-meta">
@@ -44,7 +47,7 @@
               }
               @if (!string.IsNullOrWhiteSpace(_player.Nationality))
               {
-                <span class="player-pill">@_player.Nationality</span>
+                <span class="player-pill">@(CountryFlagHelper.CountryFlag(_player.Nationality)) @_player.Nationality</span>
               }
             </div>
           </div>
@@ -53,29 +56,644 @@
     </div>
 
     <div class="team-layout">
+      <div class="team-tabs">
+        <button class="team-tab @(_activeTab == "profile" ? "active" : "")" @onclick='() => _activeTab = "profile"'>
+          <img src="/images/player/profile.png" alt="" class="team-tab-icon" />
+          <span>Profile</span>
+        </button>
+        <button class="team-tab @(_activeTab == "career" ? "active" : "")" @onclick='() => _activeTab = "career"'>
+          <img src="/images/player/career.png" alt="" class="team-tab-icon" />
+          <span>Career</span>
+        </button>
+        <button class="team-tab @(_activeTab == "honours" ? "active" : "")" @onclick='() => _activeTab = "honours"'>
+          <img src="/images/player/honor.png" alt="" class="team-tab-icon" />
+          <span>Honours</span>
+        </button>
+        <button class="team-tab @(_activeTab == "milestones" ? "active" : "")" @onclick='() => _activeTab = "milestones"'>
+          <img src="/images/player/milestone.png" alt="" class="team-tab-icon" />
+          <span>Milestones</span>
+        </button>
+        <button class="team-tab @(_activeTab == "contracts" ? "active" : "")" @onclick='() => _activeTab = "contracts"'>
+          <img src="/images/player/contract.png" alt="" class="team-tab-icon" />
+          <span>Contracts</span>
+        </button>
+        <button class="team-tab @(_activeTab == "links" ? "active" : "")" @onclick='() => _activeTab = "links"'>
+          <img src="/images/teams/media.png" alt="" class="team-tab-icon" />
+          <span>Media</span>
+        </button>
+      </div>
       <div class="team-content">
-        <div class="team-tab-content">
-          <div class="team-section-block">
-            <h3 class="team-block-title">Profile</h3>
-            <div class="team-info-row">
-              @if (_player.DateOfBirth != null)
-              {
-                <div class="team-info-item">
-                  <span class="team-info-label">Born</span>
-                  <span class="team-info-value">@_player.DateOfBirth.Value.ToString("yyyy-MM-dd")</span>
+        @if (_activeTab == "profile")
+        {
+          <div class="team-tab-content">
+            @if (!string.IsNullOrWhiteSpace(_player.PosterUrl))
+            {
+              <div class="player-profile-layout">
+                <div class="player-poster-block">
+                  <img src="@_player.PosterUrl" alt="@_player.Name poster" class="player-poster-img" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'" />
                 </div>
-              }
-
-              @if (!string.IsNullOrWhiteSpace(_player.CurrentTeamName))
-              {
-                <div class="team-info-item">
-                  <span class="team-info-label">Current Team</span>
-                  <span class="team-info-value">@_player.CurrentTeamName</span>
+                <div class="player-profile-fields">
+                  <div class="team-section-block">
+                    <div class="team-info-row">
+                    @if (_player.DateOfBirth != null)
+                    {
+                      <div class="team-info-item">
+                        <span class="team-info-label">Born</span>
+                        <span class="team-info-value">@FormatBornWithAge(_player.DateOfBirth)</span>
+                      </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_player.CurrentTeamName))
+                    {
+                      <div class="team-info-item">
+                        <span class="team-info-label">Current Team</span>
+                        <span class="team-info-value">@_player.CurrentTeamName</span>
+                      </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_player.Gender))
+                    {
+                      <div class="team-info-item">
+                        <span class="team-info-label">Gender</span>
+                        <span class="team-info-value">@_player.Gender</span>
+                      </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_player.Side))
+                    {
+                      <div class="team-info-item">
+                        <span class="team-info-label">Side</span>
+                        <span class="team-info-value">@_player.Side</span>
+                      </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_player.College))
+                    {
+                      <div class="team-info-item">
+                        <span class="team-info-label">College</span>
+                        <span class="team-info-value">@_player.College</span>
+                      </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_player.Height))
+                    {
+                      <div class="team-info-item">
+                        <span class="team-info-label">Height</span>
+                        <span class="team-info-value">@_player.Height</span>
+                      </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_player.Weight))
+                    {
+                      <div class="team-info-item">
+                        <span class="team-info-label">Weight</span>
+                        <span class="team-info-value">@_player.Weight</span>
+                      </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_player.BirthLocation))
+                    {
+                      <div class="team-info-item">
+                        <span class="team-info-label">Birth Location</span>
+                        <span class="team-info-value">@_player.BirthLocation</span>
+                      </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_player.Ethnicity))
+                    {
+                      <div class="team-info-item">
+                        <span class="team-info-label">Ethnicity</span>
+                        <span class="team-info-value">@_player.Ethnicity</span>
+                      </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_player.Agent))
+                    {
+                      <div class="team-info-item">
+                        <span class="team-info-label">Agent</span>
+                        <span class="team-info-value">@_player.Agent</span>
+                      </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_player.Wage))
+                    {
+                      <div class="team-info-item">
+                        <span class="team-info-label">Wage</span>
+                        <span class="team-info-value">@_player.Wage</span>
+                      </div>
+                    }
+                  </div>
                 </div>
-              }
+              </div>
             </div>
+            }
+            else
+            {
+              <div class="player-profile-fields">
+                <div class="team-section-block">
+                  <div class="team-info-row">
+                    @if (_player.DateOfBirth != null)
+                    {
+                      <div class="team-info-item">
+                        <span class="team-info-label">Born</span>
+                        <span class="team-info-value">@FormatBornWithAge(_player.DateOfBirth)</span>
+                      </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_player.CurrentTeamName))
+                    {
+                      <div class="team-info-item">
+                        <span class="team-info-label">Current Team</span>
+                        <span class="team-info-value">@_player.CurrentTeamName</span>
+                      </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_player.Gender))
+                    {
+                      <div class="team-info-item">
+                        <span class="team-info-label">Gender</span>
+                        <span class="team-info-value">@_player.Gender</span>
+                      </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_player.Side))
+                    {
+                      <div class="team-info-item">
+                        <span class="team-info-label">Side</span>
+                        <span class="team-info-value">@_player.Side</span>
+                      </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_player.College))
+                    {
+                      <div class="team-info-item">
+                        <span class="team-info-label">College</span>
+                        <span class="team-info-value">@_player.College</span>
+                      </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_player.Height))
+                    {
+                      <div class="team-info-item">
+                        <span class="team-info-label">Height</span>
+                        <span class="team-info-value">@_player.Height</span>
+                      </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_player.Weight))
+                    {
+                      <div class="team-info-item">
+                        <span class="team-info-label">Weight</span>
+                        <span class="team-info-value">@_player.Weight</span>
+                      </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_player.BirthLocation))
+                    {
+                      <div class="team-info-item">
+                        <span class="team-info-label">Birth Location</span>
+                        <span class="team-info-value">@_player.BirthLocation</span>
+                      </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_player.Ethnicity))
+                    {
+                      <div class="team-info-item">
+                        <span class="team-info-label">Ethnicity</span>
+                        <span class="team-info-value">@_player.Ethnicity</span>
+                      </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_player.Agent))
+                    {
+                      <div class="team-info-item">
+                        <span class="team-info-label">Agent</span>
+                        <span class="team-info-value">@_player.Agent</span>
+                      </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_player.Wage))
+                    {
+                      <div class="team-info-item">
+                        <span class="team-info-label">Wage</span>
+                        <span class="team-info-value">@_player.Wage</span>
+                      </div>
+                    }
+                  </div>
+                </div>
+              </div>
+            }
+            @if (!string.IsNullOrWhiteSpace(_player.Description))
+            {
+              <div class="team-section-block">
+                <h3 class="team-block-title">Description</h3>
+                <div class="player-description">@_player.Description</div>
+              </div>
+            }
+            @if (!string.IsNullOrWhiteSpace(_player.SeasonStats))
+            {
+              <div class="team-section-block">
+                <h3 class="team-block-title">Season Stats</h3>
+                <div class="player-season-stats">@_player.SeasonStats</div>
+              </div>
+            }
+            @if (!HasAnyEnrichment())
+            {
+              <p class="player-no-enrichment small-muted">Career, honours, contracts and media are in the other tabs when provided by the data source.</p>
+            }
           </div>
-        </div>
+        }
+        @if (_activeTab == "career")
+        {
+          <div class="team-tab-content player-career-timeline-wrap">
+            @if (_formerTeams != null && _formerTeams.Count > 0 && _player != null)
+            {
+              var entries = GetCareerEntriesOrderedByJoined();
+              var summary = GetCareerSummary(entries);
+              <h3 class="team-block-title">Former Clubs</h3>
+              <div class="player-career-summary">
+                @if (summary.CareerStartYear.HasValue) { <span>Career start: <strong>@summary.CareerStartYear</strong></span> }
+                <span>Club stints: <strong>@summary.ClubStints</strong></span>
+                <span>Clubs: <strong>@summary.UniqueClubs</strong></span>
+                @if (!string.IsNullOrWhiteSpace(summary.LongestSpell)) { <span>Longest spell: <strong>@summary.LongestSpell</strong></span> }
+                @if (!string.IsNullOrWhiteSpace(summary.NationalTeamSpan)) { <span>National team: <strong>@summary.NationalTeamSpan</strong></span> }
+              </div>
+              <div class="player-career-timeline">
+                <div class="player-career-spine"></div>
+                @{
+                  var inYouthBlock = false;
+                }
+                @foreach (var e in entries)
+                {
+                  if (e.IsYouth && !inYouthBlock) { inYouthBlock = true; <div class="player-career-dev-label">Development Years</div> }
+                  if (!e.IsYouth && inYouthBlock) { inYouthBlock = false; }
+                  var laneClass = e.IsNational ? "player-career-node-national" : "player-career-node-club";
+                  var nodeClass = "player-career-node " + laneClass + (e.IsYouth ? " player-career-node-youth" : "");
+                  var durationBarPct = Math.Min(100, 20 + (int)(Math.Sqrt(Math.Max(0, e.DurationYears)) * 12));
+                  <div class="player-career-row">
+                    <div class="@nodeClass" style="--duration-pct: @(durationBarPct);">
+                      <div class="player-career-node-bar" title="@(e.DurationYears > 0 ? FormatDuration(e.DurationYears) : "")">
+                        @if (e.DurationYears > 0)
+                        {
+                          <span class="player-career-node-bar-years">@(FormatDuration(e.DurationYears))</span>
+                        }
+                      </div>
+                      <img src="@(e.TeamBadge ?? "/images/icons/soccer-player.png")" alt="" class="player-career-node-badge" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/icons/soccer-player.png';" />
+                      <div class="player-career-node-body">
+                        <span class="player-career-node-name">@(e.TeamName ?? "—")</span>
+                        <span class="player-career-node-years">@(e.YearStart ?? e.Joined ?? "?") – @(e.YearEnd ?? e.Departed ?? "?")</span>
+                        @if (e.DurationYears > 0) { <span class="player-career-node-duration">@(FormatDuration(e.DurationYears))</span> }
+                        <div class="player-career-node-chips">
+                          @if (e.IsYouth) { <span class="player-career-chip player-career-chip-youth">Youth Teams</span> } else { <span class="player-career-chip player-career-chip-senior">Senior</span> }
+                          @if (!string.IsNullOrWhiteSpace(e.ContractType) && !e.IsYouth) { <span class="player-career-chip">@e.ContractType</span> }
+                          @if (e.IsReturn) { <span class="player-career-chip player-career-chip-return">Return</span> }
+                          @if (e.IsNational) { <span class="player-career-chip player-career-chip-national">National Team</span> }
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                }
+              </div>
+              <p class="player-career-source-note small-muted">Based on available transfer history from provider.</p>
+            }
+            else
+            {
+              <p class="player-no-enrichment small-muted">No career or former teams data available.</p>
+            }
+          </div>
+        }
+        @if (_activeTab == "honours")
+        {
+          <div class="team-tab-content player-honours-cabinet-wrap">
+            @if (_honours != null && _honours.Count > 0)
+            {
+              var groups = GetHonourGroups();
+              var summary = GetHonoursSummary(groups);
+              var filteredGroups = GetFilteredAndSortedHonourGroups(groups);
+              <h3 class="team-block-title">Honours & Awards</h3>
+              <p class="player-honours-subtitle">Career achievements grouped by competition and award type.</p>
+              <div class="player-honours-summary-band">
+                <span>Total honors: <strong>@summary.TotalCount</strong></span>
+                <span>Unique types: <strong>@summary.UniqueTypes</strong></span>
+                <span>Team trophies: <strong>@summary.TeamCount</strong></span>
+                <span>Individual: <strong>@summary.IndividualCount</strong></span>
+                @if (!string.IsNullOrWhiteSpace(summary.MostFrequent)) { <span>Most frequent: <strong>@summary.MostFrequent</strong></span> }
+                @if (!string.IsNullOrWhiteSpace(summary.PeakPeriod)) { <span>Peak: <strong>@summary.PeakPeriod</strong></span> }
+              </div>
+              <div class="player-honours-controls">
+                <span class="player-honours-control-label">Filter:</span>
+                <div class="player-honours-filters">
+                  <button type="button" class="player-honours-filter @(_honourFilter == "all" ? "active" : "")" @onclick='() => _honourFilter = "all"'>All</button>
+                  <button type="button" class="player-honours-filter @(_honourFilter == "team" ? "active" : "")" @onclick='() => _honourFilter = "team"'>Team</button>
+                  <button type="button" class="player-honours-filter @(_honourFilter == "individual" ? "active" : "")" @onclick='() => _honourFilter = "individual"'>Individual</button>
+                  <button type="button" class="player-honours-filter @(_honourFilter == "scorer" ? "active" : "")" @onclick='() => _honourFilter = "scorer"'>Scorer</button>
+                  <button type="button" class="player-honours-filter @(_honourFilter == "bestxi" ? "active" : "")" @onclick='() => _honourFilter = "bestxi"'>Best XI</button>
+                  <button type="button" class="player-honours-filter @(_honourFilter == "youth" ? "active" : "")" @onclick='() => _honourFilter = "youth"'>Youth</button>
+                </div>
+                <span class="player-honours-control-label">Sort:</span>
+                <div class="sb-filter-custom @(_honourSortOpen ? "sb-filter-open" : "")">
+                  <button type="button" class="sb-filter-btn" @onclick='() => _honourSortOpen = !_honourSortOpen'>
+                    <span class="sb-filter-text">@( _honourSort == "prestige" ? "Prestige" : _honourSort == "count" ? "Count" : _honourSort == "latest" ? "Latest" : "Alphabetical" )</span>
+                    <span class="sb-filter-arrow">▼</span>
+                  </button>
+                  @if (_honourSortOpen)
+                  {
+                    <div class="sb-filter-menu">
+                      <button type="button" class="sb-filter-option @(_honourSort == "prestige" ? "active" : "")" @onclick='() => { _honourSort = "prestige"; _honourSortOpen = false; }'>Prestige</button>
+                      <button type="button" class="sb-filter-option @(_honourSort == "count" ? "active" : "")" @onclick='() => { _honourSort = "count"; _honourSortOpen = false; }'>Count</button>
+                      <button type="button" class="sb-filter-option @(_honourSort == "latest" ? "active" : "")" @onclick='() => { _honourSort = "latest"; _honourSortOpen = false; }'>Latest</button>
+                      <button type="button" class="sb-filter-option @(_honourSort == "alpha" ? "active" : "")" @onclick='() => { _honourSort = "alpha"; _honourSortOpen = false; }'>Alphabetical</button>
+                    </div>
+                  }
+                </div>
+              </div>
+              <div class="player-honours-controls player-honours-controls-row">
+                <span class="player-honours-control-label">View:</span>
+                <div class="player-honours-view-toggle">
+                  <button type="button" class="player-honours-view-btn @(_honourView == "cabinet" ? "active" : "")" @onclick='() => _honourView = "cabinet"'>Cabinet</button>
+                  <button type="button" class="player-honours-view-btn @(_honourView == "timeline" ? "active" : "")" @onclick='() => _honourView = "timeline"'>Timeline</button>
+                </div>
+              </div>
+              @if (_honourView == "timeline")
+              {
+                <div class="player-honours-timeline-list">
+                  @foreach (var item in GetHonoursTimelineList())
+                  {
+                    <div class="player-honours-timeline-item">
+                      <span class="player-honours-timeline-year">@item.SeasonDisplay</span>
+                      <span class="player-honours-timeline-name">@item.Name</span>
+                      @if (!string.IsNullOrWhiteSpace(item.Competition)) { <span class="player-honours-timeline-meta">@item.Competition</span> }
+                    </div>
+                  }
+                </div>
+              }
+              else
+              {
+                var byCategory = filteredGroups.GroupBy(g => g.Category).OrderBy(g => HonourCategoryOrder(g.Key)).ToList();
+                @foreach (var cat in byCategory)
+                {
+                  var catKey = cat.Key;
+                  var isCollapsed = _honoursCollapsed.Contains(catKey);
+                  <div class="player-honours-category">
+                    <button type="button" class="player-honours-category-header" @onclick='() => ToggleHonoursCategory(catKey)'>
+                      <span class="player-honours-category-title">@HonourCategoryLabel(catKey)</span>
+                      <span class="player-honours-category-count">@cat.Count()</span>
+                      <span class="player-honours-category-chevron">@(isCollapsed ? "▶" : "▼")</span>
+                    </button>
+                    @if (!isCollapsed)
+                    {
+                      <div class="player-honours-card-grid">
+                        @foreach (var g in cat)
+                        {
+                          var imgUrl = g.IconUrl ?? "/images/player/honor.png";
+                          var prestigeClass = g.IsPrestige ? " player-honours-card-prestige" : (g.IsRecurring ? " player-honours-card-recurring" : "");
+                          <div class="player-honours-card@(prestigeClass)">
+                            <img src="@imgUrl" alt="" class="player-honours-card-icon" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/player/honor.png';" />
+                            <div class="player-honours-card-body">
+                              <span class="player-honours-card-name">@g.DisplayName</span>
+                              @if (!string.IsNullOrWhiteSpace(g.Competition)) { <span class="player-honours-card-sub">@g.Competition</span> }
+                              <div class="player-honours-card-chips">
+                                @foreach (var chip in g.SeasonChips.Take(_honoursExpandedCard == g.DisplayName ? 999 : 6))
+                                {
+                                  <span class="player-honours-year-chip">@chip</span>
+                                }
+                                @if (g.SeasonChips.Count > 6 && _honoursExpandedCard != g.DisplayName)
+                                {
+                                  <button type="button" class="player-honours-more-btn" @onclick='() => _honoursExpandedCard = _honoursExpandedCard == g.DisplayName ? null : g.DisplayName'>+@(g.SeasonChips.Count - 6) more</button>
+                                }
+                              </div>
+                              @if (g.FirstWonYear != null || g.LastWonYear != null)
+                              {
+                                <span class="player-honours-card-meta">First: @(g.FirstWonYear ?? "—") · Last: @(g.LastWonYear ?? "—")@(g.SpanYears.HasValue ? $" · Span: {g.SpanYears}y" : "")</span>
+                              }
+                            </div>
+                            <div class="player-honours-card-count">
+                              <span class="player-honours-card-number">@g.Count</span>
+                              <span class="player-honours-card-label">@(g.Count == 1 ? "win" : "wins")</span>
+                            </div>
+                          </div>
+                        }
+                      </div>
+                    }
+                  </div>
+                }
+              }
+            }
+            else
+            {
+              <p class="player-no-enrichment small-muted">No honours data available.</p>
+            }
+          </div>
+        }
+        @if (_activeTab == "milestones")
+        {
+          <div class="team-tab-content player-milestones-moments-wrap">
+            @if (_milestones != null && _milestones.Count > 0)
+            {
+              var milestoneItems = GetMilestoneItems();
+              var filtered = GetFilteredMilestoneItems(milestoneItems);
+              var msSummary = GetMilestonesSummary(milestoneItems);
+              <h3 class="team-block-title">Career Moments</h3>
+              <p class="player-milestones-subtitle">Milestones &amp; records — timeline of career moments.</p>
+              <div class="player-milestones-summary-band">
+                <span>Total: <strong>@msSummary.Total</strong></span>
+                <span>Hat-tricks: <strong>@msSummary.HatTricks</strong></span>
+                <span>Career landmarks: <strong>@msSummary.Records</strong></span>
+                <span>Tournament: <strong>@msSummary.Tournament</strong></span>
+                @if (!string.IsNullOrWhiteSpace(msSummary.MostRecent)) { <span>Most recent: <strong>@msSummary.MostRecent</strong></span> }
+              </div>
+              <div class="player-milestones-controls">
+                <span class="player-honours-control-label">Filter:</span>
+                <div class="player-honours-filters">
+                  <button type="button" class="player-honours-filter @(_milestoneFilter == "all" ? "active" : "")" @onclick='() => _milestoneFilter = "all"'>All</button>
+                  <button type="button" class="player-honours-filter @(_milestoneFilter == "record" ? "active" : "")" @onclick='() => _milestoneFilter = "record"'>Records</button>
+                  <button type="button" class="player-honours-filter @(_milestoneFilter == "hattrick" ? "active" : "")" @onclick='() => _milestoneFilter = "hattrick"'>Hat-Tricks</button>
+                  <button type="button" class="player-honours-filter @(_milestoneFilter == "league" ? "active" : "")" @onclick='() => _milestoneFilter = "league"'>League Awards</button>
+                  <button type="button" class="player-honours-filter @(_milestoneFilter == "tournament" ? "active" : "")" @onclick='() => _milestoneFilter = "tournament"'>Tournament</button>
+                  @foreach (var team in GetMilestoneTeams())
+                  {
+                    <button type="button" class="player-honours-filter @(_milestoneFilter == team ? "active" : "")" @onclick='() => _milestoneFilter = team'>@team</button>
+                  }
+                </div>
+              </div>
+              <div class="player-milestones-controls player-honours-controls-row">
+                <span class="player-honours-control-label">View:</span>
+                <div class="player-honours-view-toggle">
+                  <button type="button" class="player-honours-view-btn @(_milestoneView == "timeline" ? "active" : "")" @onclick='() => _milestoneView = "timeline"'>Timeline</button>
+                  <button type="button" class="player-honours-view-btn @(_milestoneView == "compact" ? "active" : "")" @onclick='() => _milestoneView = "compact"'>Compact</button>
+                </div>
+              </div>
+              @if (_milestoneView == "compact")
+              {
+                <div class="player-milestones-compact-grid">
+                  @foreach (var item in filtered)
+                  {
+                    <div class="player-milestone-card @(item.IsFeatured ? "player-milestone-card-featured" : "")">
+                      <img src="@(item.IconUrl ?? "/images/player/milestone.png")" alt="" class="player-milestone-card-icon" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/player/milestone.png';" />
+                      <div class="player-milestone-card-body">
+                        <span class="player-milestone-card-title">@item.Title</span>
+                        @if (!string.IsNullOrWhiteSpace(item.Team)) { <div class="player-milestone-card-team"><img src="@(item.BadgeUrl ?? "/images/icons/soccer-player.png")" alt="" class="player-milestone-card-badge" onerror="this.style.display='none'" /> @item.Team</div> }
+                        <div class="player-milestone-card-meta">
+                          <span class="player-milestone-card-date">@item.DateDisplay</span>
+                          <span class="player-milestone-chip player-milestone-chip-@(item.Category)">@item.CategoryLabel</span>
+                        </div>
+                        @if (item.IsFeatured && !string.IsNullOrWhiteSpace(item.Subtitle)) { <span class="player-milestone-card-sub">@item.Subtitle</span> }
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
+              else
+              {
+                <div class="player-milestones-timeline">
+                  <div class="player-milestones-spine"></div>
+                  @foreach (var yearGroup in filtered.GroupBy(x => x.Year).OrderByDescending(g => g.Key))
+                  {
+                    <div class="player-milestones-year-header" data-year="@yearGroup.Key">@yearGroup.Key</div>
+                    @foreach (var item in yearGroup.OrderByDescending(x => x.SortDate))
+                    {
+                      <div class="player-milestones-row">
+                        <div class="player-milestone-card @(item.IsFeatured ? "player-milestone-card-featured" : "")">
+                          <img src="@(item.IconUrl ?? "/images/player/milestone.png")" alt="" class="player-milestone-card-icon" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/player/milestone.png';" />
+                          <div class="player-milestone-card-body">
+                            <span class="player-milestone-card-title">@item.Title</span>
+                            @if (!string.IsNullOrWhiteSpace(item.Team)) { <div class="player-milestone-card-team"><img src="@(item.BadgeUrl ?? "/images/icons/soccer-player.png")" alt="" class="player-milestone-card-badge" onerror="this.style.display='none'" /> @item.Team</div> }
+                            <div class="player-milestone-card-meta">
+                              <span class="player-milestone-card-date">@item.DateDisplay</span>
+                              <span class="player-milestone-chip player-milestone-chip-@(item.Category)">@item.CategoryLabel</span>
+                            </div>
+                            @if (item.IsFeatured && !string.IsNullOrWhiteSpace(item.Subtitle)) { <span class="player-milestone-card-sub">@item.Subtitle</span> }
+                          </div>
+                        </div>
+                      </div>
+                    }
+                  }
+                </div>
+              }
+            }
+            else
+            {
+              <p class="player-no-enrichment small-muted">No milestones data available.</p>
+            }
+          </div>
+        }
+        @if (_activeTab == "contracts")
+        {
+          <div class="team-tab-content">
+            @if (_contracts != null && _contracts.Count > 0)
+            {
+              <div class="team-section-block">
+                <div class="player-contracts-list">
+                  @foreach (var c in _contracts)
+                  {
+                    <div class="player-contract-item">
+                      @if (!string.IsNullOrWhiteSpace(c.TeamBadge))
+                      {
+                        <img src="@c.TeamBadge" alt="" class="player-career-badge" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'" />
+                      }
+                      <div class="player-contract-info">
+                        @if (!string.IsNullOrWhiteSpace(c.TeamId))
+                        { <a href="/team/@c.TeamId" class="player-career-team player-link">@(c.TeamName ?? "—")</a> }
+                        else { <span class="player-career-team">@(c.TeamName ?? "—")</span> }
+                        @if (!string.IsNullOrWhiteSpace(c.YearStart) || !string.IsNullOrWhiteSpace(c.YearEnd))
+                        {
+                          <span class="player-career-years">@(c.YearStart ?? "?") – @(c.YearEnd ?? "?")</span>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(c.Wage)) { <span class="player-contract-wage">@c.Wage</span> }
+                        @if (!string.IsNullOrWhiteSpace(c.Signing)) { <span class="player-contract-signing">@c.Signing</span> }
+                      </div>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+            else
+            {
+              <p class="player-no-enrichment small-muted">No contracts data available.</p>
+            }
+          </div>
+        }
+        @if (_activeTab == "links")
+        {
+          <div class="team-tab-content player-media-tab">
+            @if (HasPlayerFeaturedMedia() || (_player.FanartUrls != null && _player.FanartUrls.Count > 0) || HasAnyLink())
+            {
+              @if (HasPlayerFeaturedMedia())
+              {
+                <div class="team-section-block">
+                  <h3 class="team-block-title">Featured</h3>
+                  <div class="team-viewbar">
+                    <span class="team-viewbar-label">View:</span>
+                    <button type="button" class="team-viewbtn @(_playerMediaView == "cutout" ? "active" : "")" @onclick='() => _playerMediaView = "cutout"'>Cutout</button>
+                    <button type="button" class="team-viewbtn @(_playerMediaView == "cartoon" ? "active" : "")" @onclick='() => _playerMediaView = "cartoon"'>Cartoon</button>
+                    <button type="button" class="team-viewbtn @(_playerMediaView == "render" ? "active" : "")" @onclick='() => _playerMediaView = "render"'>Render</button>
+                  </div>
+                  <div class="player-media-featured">
+                    <img src="@(GetPlayerFeaturedMediaUrl() ?? "/images/icons/soccer-player.png")" alt="@_player.Name" class="player-media-cutout" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/icons/soccer-player.png';" />
+                  </div>
+                </div>
+              }
+              @if (_player.FanartUrls != null && _player.FanartUrls.Count > 0)
+              {
+                <div class="team-section-block">
+                  <h3 class="team-block-title">Gallery</h3>
+                  <div class="sb-gallery-grid">
+                    @for (var i = 0; i < _player.FanartUrls.Count; i++)
+                    {
+                      var url = _player.FanartUrls[i];
+                      <img src="@url"
+                           alt="@_player.Name gallery"
+                           class="sb-gallery-img"
+                           loading="lazy"
+                           referrerpolicy="no-referrer"
+                           onerror="this.style.display='none';"
+                           @onclick="() => OpenPlayerGallery(i)" />
+                    }
+                  </div>
+                </div>
+              }
+              @if (HasAnyLink())
+              {
+                <div class="team-section-block">
+                  <h3 class="team-block-title">Links</h3>
+                  <div class="player-links-list">
+                    @if (!string.IsNullOrWhiteSpace(_player.InstagramUrl))
+                    {
+                      <a href="@NormalizeLink(_player.InstagramUrl, "instagram.com")" target="_blank" rel="noopener noreferrer" class="player-link-item">
+                        <img src="/images/teams/media/instagram.png" alt="Instagram" class="player-link-icon-img" loading="lazy" />
+                        <span>Instagram</span>
+                      </a>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_player.FacebookUrl))
+                    {
+                      <a href="@NormalizeLink(_player.FacebookUrl, "facebook.com")" target="_blank" rel="noopener noreferrer" class="player-link-item">
+                        <img src="/images/teams/media/facebook.png" alt="Facebook" class="player-link-icon-img" loading="lazy" />
+                        <span>Facebook</span>
+                      </a>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_player.TwitterUrl))
+                    {
+                      <a href="@NormalizeLink(_player.TwitterUrl, "twitter.com")" target="_blank" rel="noopener noreferrer" class="player-link-item">
+                        <img src="/images/teams/media/twitter.png" alt="Twitter / X" class="player-link-icon-img" loading="lazy" />
+                        <span>Twitter / X</span>
+                      </a>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_player.YoutubeUrl))
+                    {
+                      <a href="@NormalizeLink(_player.YoutubeUrl, "youtube.com")" target="_blank" rel="noopener noreferrer" class="player-link-item">
+                        <img src="/images/teams/media/youtube.png" alt="YouTube" class="player-link-icon-img" loading="lazy" />
+                        <span>YouTube</span>
+                      </a>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_player.WebsiteUrl))
+                    {
+                      <a href="@NormalizeLink(_player.WebsiteUrl, null)" target="_blank" rel="noopener noreferrer" class="player-link-item">
+                        <img src="/images/teams/media.png" alt="Website" class="player-link-icon-img" loading="lazy" />
+                        <span>Website</span>
+                      </a>
+                    }
+                  </div>
+                </div>
+              }
+            }
+            else
+            {
+              <p class="player-no-enrichment small-muted">No media or links available.</p>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  @if (_playerGalleryOpen && _playerGalleryUrls != null && _playerGalleryUrls.Count > 0)
+  {
+    <div class="sb-gallery-overlay" @onclick="ClosePlayerGallery">
+      <div class="sb-gallery-modal" @onclick:stopPropagation="true">
+        <button type="button" class="sb-gallery-close" @onclick="ClosePlayerGallery" aria-label="Close gallery">×</button>
+        <button type="button" class="sb-gallery-nav sb-gallery-nav-prev" @onclick="PrevPlayerGallery" aria-label="Previous">‹</button>
+        <img src="@_playerGalleryUrls[_playerGalleryIndex]" alt="Gallery" class="sb-gallery-img" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none';" />
+        <button type="button" class="sb-gallery-nav sb-gallery-nav-next" @onclick="NextPlayerGallery" aria-label="Next">›</button>
       </div>
     </div>
   }
@@ -84,19 +702,61 @@
 @code {
   [Parameter] public string? Id { get; set; }
 
+  private string _activeTab = "profile";
   private bool _loading = true;
   private PlayerDetailDto? _player;
+  private List<PlayerContractDto>? _contracts;
+  private List<PlayerFormerTeamDto>? _formerTeams;
+  private List<PlayerHonourDto>? _honours;
+  private List<PlayerMilestoneDto>? _milestones;
+  private string _honourFilter = "all";
+  private string _honourSort = "prestige";
+  private bool _honourSortOpen;
+  private string _honourView = "cabinet";
+  private HashSet<string> _honoursCollapsed = new(StringComparer.OrdinalIgnoreCase) { "bestxi" };
+  private string? _honoursExpandedCard;
+  private string _milestoneFilter = "all";
+  private string _milestoneView = "timeline";
+  private bool _milestoneSortOpen;
+  private string _playerMediaView = "cutout";
 
   protected override async Task OnParametersSetAsync()
   {
     _loading = true;
     _player = null;
+    _contracts = null;
+    _formerTeams = null;
+    _honours = null;
+    _milestones = null;
 
     try
     {
       if (string.IsNullOrWhiteSpace(Id)) return;
-      using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+      using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
       _player = await Api.GetPlayerAsync(Id!, cts.Token);
+      if (_player == null) return;
+
+      var pid = Id!.Trim();
+      try
+      {
+        var loadContracts = Api.GetPlayerContractsAsync(pid, cts.Token);
+        var loadFormerTeams = Api.GetPlayerFormerTeamsAsync(pid, cts.Token);
+        var loadHonours = Api.GetPlayerHonoursAsync(pid, cts.Token);
+        var loadMilestones = Api.GetPlayerMilestonesAsync(pid, cts.Token);
+        await Task.WhenAll(loadContracts, loadFormerTeams, loadHonours, loadMilestones);
+
+        _contracts = await loadContracts;
+        _formerTeams = await loadFormerTeams;
+        _honours = await loadHonours;
+        _milestones = await loadMilestones;
+      }
+      catch
+      {
+        _contracts = new List<PlayerContractDto>();
+        _formerTeams = new List<PlayerFormerTeamDto>();
+        _honours = new List<PlayerHonourDto>();
+        _milestones = new List<PlayerMilestoneDto>();
+      }
     }
     catch
     {
@@ -106,6 +766,103 @@
     {
       _loading = false;
     }
+  }
+
+  private bool HasAnyEnrichment()
+  {
+    return (_contracts?.Count ?? 0) > 0 || (_formerTeams?.Count ?? 0) > 0 ||
+           (_honours?.Count ?? 0) > 0 || (_milestones?.Count ?? 0) > 0 || HasAnyLink();
+  }
+
+  private bool HasAnyLink()
+  {
+    return _player != null && (
+      !string.IsNullOrWhiteSpace(_player.InstagramUrl) ||
+      !string.IsNullOrWhiteSpace(_player.FacebookUrl) ||
+      !string.IsNullOrWhiteSpace(_player.TwitterUrl) ||
+      !string.IsNullOrWhiteSpace(_player.YoutubeUrl) ||
+      !string.IsNullOrWhiteSpace(_player.WebsiteUrl));
+  }
+
+  private static bool IsPlayerStatusActive(string? status)
+  {
+    return !string.IsNullOrWhiteSpace(status) && status.Trim().Equals("Active", StringComparison.OrdinalIgnoreCase);
+  }
+
+  private static string FormatBornWithAge(DateTime? dateOfBirth)
+  {
+    if (dateOfBirth == null) return "";
+    var dob = dateOfBirth.Value;
+    var s = dob.ToString("yyyy-MM-dd");
+    var today = DateTime.Today;
+    var age = today.Year - dob.Year;
+    if (dob.Date > today.AddYears(-age)) age--;
+    if (age >= 0 && age <= 120) return $"{s} ({age} years)";
+    return s;
+  }
+
+  private string? GetPlayerFeaturedMediaUrl()
+  {
+    if (_player == null) return null;
+    return _playerMediaView switch
+    {
+      "cartoon" => _player.CartoonUrl ?? _player.CutoutUrl ?? _player.RenderUrl,
+      "render" => _player.RenderUrl ?? _player.CutoutUrl ?? _player.CartoonUrl,
+      _ => _player.CutoutUrl ?? _player.CartoonUrl ?? _player.RenderUrl
+    };
+  }
+
+  private bool HasPlayerFeaturedMedia()
+  {
+    return _player != null && (!string.IsNullOrWhiteSpace(_player.CutoutUrl) || !string.IsNullOrWhiteSpace(_player.CartoonUrl) || !string.IsNullOrWhiteSpace(_player.RenderUrl));
+  }
+
+  private bool _playerGalleryOpen;
+  private int _playerGalleryIndex;
+  private List<string>? _playerGalleryUrls;
+
+  private void OpenPlayerGallery(int index)
+  {
+    if (_player?.FanartUrls == null || _player.FanartUrls.Count == 0) return;
+    _playerGalleryUrls = _player.FanartUrls;
+    _playerGalleryIndex = Math.Clamp(index, 0, _player.FanartUrls.Count - 1);
+    _playerGalleryOpen = true;
+  }
+
+  private void ClosePlayerGallery()
+  {
+    _playerGalleryOpen = false;
+  }
+
+  private void NextPlayerGallery()
+  {
+    if (_playerGalleryUrls == null || _playerGalleryUrls.Count == 0) return;
+    _playerGalleryIndex = (_playerGalleryIndex + 1) % _playerGalleryUrls.Count;
+  }
+
+  private void PrevPlayerGallery()
+  {
+    if (_playerGalleryUrls == null || _playerGalleryUrls.Count == 0) return;
+    _playerGalleryIndex = (_playerGalleryIndex - 1 + _playerGalleryUrls.Count) % _playerGalleryUrls.Count;
+  }
+
+  private static string FormatMilestoneDate(string? dateStr)
+  {
+    if (string.IsNullOrWhiteSpace(dateStr)) return "";
+    var s = dateStr.Trim();
+    if (DateTime.TryParse(s, out var d)) return d.ToString("MMM d, yyyy");
+    return s;
+  }
+
+  private static string NormalizeLink(string url, string? ensureDomain)
+  {
+    var u = url.Trim();
+    if (string.IsNullOrWhiteSpace(u)) return "#";
+    if (!u.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !u.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+      u = "https://" + u;
+    if (!string.IsNullOrWhiteSpace(ensureDomain) && !u.Contains(ensureDomain, StringComparison.OrdinalIgnoreCase))
+      u = "https://" + ensureDomain + "/" + u.TrimStart('/');
+    return u;
   }
 
   private async Task GoBack()
@@ -118,6 +875,366 @@
     {
       Nav.NavigateTo("/", forceLoad: false);
     }
+  }
+
+  private sealed record CareerEntry(
+    string? TeamId,
+    string? TeamName,
+    string? TeamBadge,
+    string? YearStart,
+    string? YearEnd,
+    string? Joined,
+    string? Departed,
+    double DurationYears,
+    bool IsNational,
+    bool IsYouth,
+    bool IsReturn,
+    string? ContractType,
+    DateTime? ParsedJoined
+  );
+
+  private sealed record CareerSummary(
+    int? CareerStartYear,
+    int ClubStints,
+    int UniqueClubs,
+    string? LongestSpell,
+    string? NationalTeamSpan
+  );
+
+  private List<CareerEntry> GetCareerEntriesOrderedByJoined()
+  {
+    if (_formerTeams == null || _formerTeams.Count == 0 || _player == null) return new List<CareerEntry>();
+    var nationality = _player.Nationality?.Trim() ?? "";
+    var list = new List<CareerEntry>();
+    var seenTeamNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var t in _formerTeams)
+    {
+      var joined = ParseFlexibleDate(t.Joined ?? t.YearStart);
+      var departed = ParseFlexibleDate(t.Departed ?? t.YearEnd);
+      var years = 0.0;
+      if (joined.HasValue && departed.HasValue) years = (departed.Value - joined.Value).TotalDays / 365.25;
+      else if (joined.HasValue && !departed.HasValue) years = (DateTime.UtcNow - joined.Value).TotalDays / 365.25;
+      var teamName = t.TeamName?.Trim() ?? "";
+      var isNational = !string.IsNullOrWhiteSpace(nationality) && !string.IsNullOrWhiteSpace(teamName) &&
+        (string.Equals(teamName, nationality, StringComparison.OrdinalIgnoreCase) || nationality.Contains(teamName, StringComparison.OrdinalIgnoreCase) || teamName.Contains(nationality, StringComparison.OrdinalIgnoreCase));
+      var isYouth = string.Equals(t.ContractType, "Youth", StringComparison.OrdinalIgnoreCase) ||
+        (teamName.Contains("Youth", StringComparison.OrdinalIgnoreCase));
+      var isReturn = !string.IsNullOrWhiteSpace(teamName) && seenTeamNames.Contains(teamName);
+      if (!string.IsNullOrWhiteSpace(teamName)) seenTeamNames.Add(teamName);
+      list.Add(new CareerEntry(
+        t.TeamId,
+        t.TeamName,
+        t.TeamBadge,
+        t.YearStart,
+        t.YearEnd,
+        t.Joined,
+        t.Departed,
+        Math.Round(years, 1),
+        isNational,
+        isYouth,
+        isReturn,
+        t.ContractType,
+        joined
+      ));
+    }
+    return list.OrderBy(e => e.ParsedJoined ?? DateTime.MaxValue).ToList();
+  }
+
+  private static DateTime? ParseFlexibleDate(string? s)
+  {
+    if (string.IsNullOrWhiteSpace(s)) return null;
+    s = s.Trim();
+    if (DateTime.TryParse(s, out var d)) return d;
+    if (int.TryParse(s, out var y) && y >= 1900 && y <= 2100) return new DateTime(y, 7, 1);
+    if (s.Length >= 4 && int.TryParse(s.Substring(0, 4), out y) && y >= 1900 && y <= 2100) return new DateTime(y, 7, 1);
+    return null;
+  }
+
+  private CareerSummary GetCareerSummary(List<CareerEntry> entries)
+  {
+    if (entries == null || entries.Count == 0) return new CareerSummary(null, 0, 0, null, null);
+    var clubs = entries.Where(e => !e.IsNational).ToList();
+    var startYear = entries.Min(e => e.ParsedJoined?.Year);
+    var clubStints = clubs.Count;
+    var uniqueClubs = clubs.Select(e => e.TeamName ?? "").Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+    var longest = clubs.OrderByDescending(e => e.DurationYears).FirstOrDefault();
+    var longestSpell = longest != null && longest.DurationYears > 0 ? $"{longest.TeamName} ({FormatDuration(longest.DurationYears)})" : null;
+    var national = entries.Where(e => e.IsNational).ToList();
+    var nationalSpan = national.Count > 0
+      ? $"{national.Min(e => e.YearStart ?? e.Joined ?? "?")}–{national.Max(e => e.YearEnd ?? e.Departed ?? "?")}"
+      : null;
+    return new CareerSummary(startYear, clubStints, uniqueClubs, longestSpell, nationalSpan);
+  }
+
+  private static string FormatDuration(double years)
+  {
+    if (years < 1) return "<1y";
+    if (years < 2) return "1y";
+    return $"{(int)years}y";
+  }
+
+  private sealed record HonourGroup(
+    string DisplayName,
+    string Category,
+    int Count,
+    List<string> SeasonChips,
+    string? FirstWonYear,
+    string? LastWonYear,
+    int? SpanYears,
+    bool IsPrestige,
+    bool IsRecurring,
+    string? IconUrl,
+    string? Competition
+  );
+
+  private sealed record HonoursSummary(
+    int TotalCount,
+    int UniqueTypes,
+    int TeamCount,
+    int IndividualCount,
+    string? MostFrequent,
+    string? PeakPeriod
+  );
+
+  private static string NormalizeHonourKey(string? name)
+  {
+    if (string.IsNullOrWhiteSpace(name)) return "";
+    var s = name.Trim();
+    s = System.Text.RegularExpressions.Regex.Replace(s, @"\s+", " ");
+    return s;
+  }
+
+  private static string NormalizeSeasonChip(string? season)
+  {
+    if (string.IsNullOrWhiteSpace(season)) return "";
+    var s = season.Trim();
+    var m = System.Text.RegularExpressions.Regex.Match(s, @"(\d{4})[-–](\d{2,4})");
+    if (m.Success && int.TryParse(m.Groups[1].Value, out var y1) && int.TryParse(m.Groups[2].Value, out var y2))
+    {
+      if (y2 >= 1000) y2 %= 100;
+      return $"{y1}–{y2:D2}";
+    }
+    if (System.Text.RegularExpressions.Regex.IsMatch(s, @"^\d{4}$")) return s;
+    return s;
+  }
+
+  private static string GetHonourCategory(string displayName, string? competition)
+  {
+    var n = (displayName + " " + (competition ?? "")).ToLowerInvariant();
+    if (n.Contains("ballon") || n.Contains("ballon d'or") || n.Contains("fifa the best") || n.Contains("player of the year") || n.Contains("pfa") || n.Contains("pichichi") || n.Contains("golden boot") || n.Contains("capocannoniere") || n.Contains("golden shoe") || n.Contains("puskás") || n.Contains("puskas")) return "individual";
+    if (n.Contains("top scorer") || n.Contains("golden boot") || n.Contains("pichichi") || n.Contains("capocannoniere") || n.Contains("golden shoe") || n.Contains("euro top")) return "scorer";
+    if (n.Contains("team of the year") || n.Contains("world xi") || n.Contains("fifpro") || n.Contains("best xi") || n.Contains("uefa team") || n.Contains("toty")) return "bestxi";
+    if (n.Contains("bravo") || n.Contains("youth") || n.Contains("young")) return "youth";
+    return "team";
+  }
+
+  private static bool IsPrestigeHonour(string displayName)
+  {
+    var n = displayName.ToLowerInvariant();
+    return n.Contains("ballon") || n.Contains("champions league") || n.Contains("euro ") || n.Contains("world cup") || n.Contains("european championship");
+  }
+
+  private static bool IsRecurringHonour(string displayName)
+  {
+    var n = displayName.ToLowerInvariant();
+    return n.Contains("team of the year") || n.Contains("world xi") || n.Contains("fifpro") || n.Contains("best xi");
+  }
+
+  private List<HonourGroup> GetHonourGroups()
+  {
+    if (_honours == null || _honours.Count == 0) return new List<HonourGroup>();
+    var dict = new Dictionary<string, List<PlayerHonourDto>>(StringComparer.OrdinalIgnoreCase);
+    foreach (var h in _honours)
+    {
+      var name = (h.Title ?? h.Honour ?? "").Trim();
+      if (string.IsNullOrWhiteSpace(name)) continue;
+      var key = NormalizeHonourKey(name);
+      if (string.IsNullOrWhiteSpace(key)) continue;
+      if (!dict.ContainsKey(key)) dict[key] = new List<PlayerHonourDto>();
+      dict[key].Add(h);
+    }
+    var list = new List<HonourGroup>();
+    foreach (var kv in dict)
+    {
+      var entries = kv.Value;
+      var first = entries[0];
+      var displayName = first.Title ?? first.Honour ?? kv.Key;
+      var competition = entries.Select(e => e.Competition).FirstOrDefault(c => !string.IsNullOrWhiteSpace(c));
+      var category = GetHonourCategory(displayName, competition);
+      var seasons = entries.Select(e => NormalizeSeasonChip(e.Season ?? e.Competition)).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().OrderBy(s => s).ToList();
+      if (seasons.Count == 0) seasons.Add("—");
+      var years = entries.Select(e => e.Season).Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => { var m = System.Text.RegularExpressions.Regex.Match(s, @"(\d{4})"); return m.Success ? m.Groups[1].Value : null; }).Where(x => x != null).Select(x => x!).ToList();
+      var firstYear = years.Count > 0 ? years.Min() : null;
+      var lastYear = years.Count > 0 ? years.Max() : null;
+      int? span = null;
+      if (firstYear != null && lastYear != null && int.TryParse(firstYear, out var fy) && int.TryParse(lastYear, out var ly)) span = ly - fy;
+      var iconUrl = first.TrophyUrl ?? first.HonourLogoUrl;
+      list.Add(new HonourGroup(displayName, category, entries.Count, seasons, firstYear, lastYear, span, IsPrestigeHonour(displayName), IsRecurringHonour(displayName), iconUrl, competition));
+    }
+    return list;
+  }
+
+  private HonoursSummary GetHonoursSummary(List<HonourGroup> groups)
+  {
+    if (groups == null || groups.Count == 0) return new HonoursSummary(0, 0, 0, 0, null, null);
+    var total = _honours?.Count ?? 0;
+    var unique = groups.Count;
+    var team = groups.Count(g => g.Category == "team");
+    var individual = groups.Count(g => g.Category == "individual" || g.Category == "scorer");
+    var mostFreq = groups.OrderByDescending(g => g.Count).FirstOrDefault();
+    var mostFrequent = mostFreq != null ? $"{mostFreq.DisplayName} ({mostFreq.Count})" : null;
+    var allYears = new List<string>();
+    foreach (var g in groups)
+      foreach (var chip in g.SeasonChips)
+      { var m = System.Text.RegularExpressions.Regex.Match(chip ?? "", @"(\d{4})"); if (m.Success) allYears.Add(m.Groups[1].Value); }
+    var peakPeriod = allYears.Count > 0 ? $"{allYears.Min()}–{allYears.Max()}" : null;
+    return new HonoursSummary(total, unique, team, individual, mostFrequent, peakPeriod);
+  }
+
+  private static int HonourCategoryOrder(string cat)
+  {
+    return cat switch { "team" => 0, "individual" => 1, "scorer" => 2, "bestxi" => 3, "youth" => 4, _ => 5 };
+  }
+
+  private static string HonourCategoryLabel(string cat)
+  {
+    return cat switch { "team" => "Team Trophies", "individual" => "Individual Awards", "scorer" => "Top Scorer Awards", "bestxi" => "Team of the Year / Best XI", "youth" => "Youth / Early Career", _ => cat };
+  }
+
+  private List<HonourGroup> GetFilteredAndSortedHonourGroups(List<HonourGroup> groups)
+  {
+    if (groups == null) return new List<HonourGroup>();
+    var list = groups.AsEnumerable();
+    if (_honourFilter != "all")
+      list = list.Where(g => string.Equals(g.Category, _honourFilter, StringComparison.OrdinalIgnoreCase));
+    list = _honourSort switch
+    {
+      "count" => list.OrderByDescending(g => g.Count).ThenBy(g => g.DisplayName),
+      "latest" => list.OrderByDescending(g => g.LastWonYear ?? "").ThenBy(g => g.DisplayName),
+      "alpha" => list.OrderBy(g => g.DisplayName),
+      _ => list.OrderByDescending(g => g.IsPrestige ? 1 : 0).ThenByDescending(g => g.Count).ThenBy(g => g.DisplayName)
+    };
+    return list.ToList();
+  }
+
+  private List<(string SeasonDisplay, string Name, string? Competition)> GetHonoursTimelineList()
+  {
+    if (_honours == null || _honours.Count == 0) return new List<(string, string, string?)>();
+    var list = _honours
+      .Select(h =>
+      {
+        var name = h.Title ?? h.Honour ?? "—";
+        var cat = GetHonourCategory(name, h.Competition);
+        return (SeasonDisplay: NormalizeSeasonChip(h.Season ?? ""), Name: name, h.Competition, Category: cat);
+      })
+      .Where(x => !string.IsNullOrWhiteSpace(x.Name));
+    if (_honourFilter != "all")
+      list = list.Where(x => string.Equals(x.Category, _honourFilter, StringComparison.OrdinalIgnoreCase));
+    return list.OrderBy(x => x.SeasonDisplay).Select(x => (x.SeasonDisplay, x.Name, x.Competition)).ToList();
+  }
+
+  private void ToggleHonoursCategory(string category)
+  {
+    var next = new HashSet<string>(_honoursCollapsed, StringComparer.OrdinalIgnoreCase);
+    if (next.Contains(category)) next.Remove(category); else next.Add(category);
+    _honoursCollapsed = next;
+  }
+
+  private sealed record MilestoneItem(
+    string Title,
+    string? Team,
+    string? BadgeUrl,
+    string? IconUrl,
+    string DateDisplay,
+    string Category,
+    string CategoryLabel,
+    int Year,
+    DateTime? SortDate,
+    bool IsFeatured,
+    string? Subtitle
+  );
+
+  private sealed record MilestonesSummary(int Total, int HatTricks, int Records, int Tournament, string? MostRecent);
+
+  private static string GetMilestoneCategory(string? name, string? stat)
+  {
+    var n = ((name ?? "") + " " + (stat ?? "")).ToLowerInvariant();
+    if (n.Contains("hat-trick") || n.Contains("hat trick")) return "hattrick";
+    if (n.Contains("player of the match") || n.Contains("potm") || n.Contains("man of the match")) return "potm";
+    if (n.Contains("player of the month") || n.Contains("goal of the month") || n.Contains("goal of the moment")) return "monthly";
+    if (n.Contains("dream team") || n.Contains("best xi") || n.Contains("team of the")) return "dreamteam";
+    if (n.Contains("500") || n.Contains("750") || n.Contains("career goal") || n.Contains("landmark") || n.Contains("record")) return "record";
+    if (n.Contains("world cup") || n.Contains("euro ") || n.Contains("champions league") || n.Contains("tournament")) return "tournament";
+    if (n.Contains("league") || n.Contains("premier league") || n.Contains("la liga")) return "league";
+    return "other";
+  }
+
+  private static string GetMilestoneCategoryLabel(string category)
+  {
+    return category switch { "hattrick" => "Hat-Trick", "potm" => "Player of the Match", "monthly" => "Monthly Award", "dreamteam" => "Dream Team", "record" => "Record", "tournament" => "Tournament", "league" => "League Award", _ => "Milestone" };
+  }
+
+  private static bool IsFeaturedMilestone(string category, string? name)
+  {
+    var n = (name ?? "").ToLowerInvariant();
+    if (category == "record") return true;
+    if (category == "tournament" && (n.Contains("hat-trick") || n.Contains("dream team"))) return true;
+    if (n.Contains("500 career") || n.Contains("750 career")) return true;
+    return false;
+  }
+
+  private List<MilestoneItem> GetMilestoneItems()
+  {
+    if (_milestones == null || _milestones.Count == 0) return new List<MilestoneItem>();
+    var list = new List<MilestoneItem>();
+    foreach (var m in _milestones)
+    {
+      var title = m.Name ?? m.Description ?? "—";
+      if (string.IsNullOrWhiteSpace(title)) continue;
+      var category = GetMilestoneCategory(title, m.Stat);
+      var categoryLabel = GetMilestoneCategoryLabel(category);
+      var dateDisplay = FormatMilestoneDate(m.DateMilestone ?? m.Season);
+      if (string.IsNullOrWhiteSpace(dateDisplay)) dateDisplay = m.Season ?? "—";
+      var (year, sortDate) = ParseMilestoneYear(m.DateMilestone ?? m.Season);
+      var isFeatured = IsFeaturedMilestone(category, title);
+      var subtitle = isFeatured && (category == "record" || category == "tournament") ? (category == "record" ? "Career landmark" : "Tournament landmark") : null;
+      list.Add(new MilestoneItem(title, m.Team, m.BadgeUrl, m.MilestoneLogoUrl ?? m.BadgeUrl, dateDisplay, category, categoryLabel, year, sortDate, isFeatured, subtitle));
+    }
+    return list.OrderByDescending(x => x.SortDate ?? DateTime.MinValue).ToList();
+  }
+
+  private static (int year, DateTime? sortDate) ParseMilestoneYear(string? s)
+  {
+    if (string.IsNullOrWhiteSpace(s)) return (0, null);
+    var m = System.Text.RegularExpressions.Regex.Match(s.Trim(), @"(\d{4})");
+    if (m.Success && int.TryParse(m.Groups[1].Value, out var y)) return (y, new DateTime(y, 6, 1));
+    if (DateTime.TryParse(s, out var d)) return (d.Year, d);
+    return (0, null);
+  }
+
+  private MilestonesSummary GetMilestonesSummary(List<MilestoneItem> items)
+  {
+    if (items == null || items.Count == 0) return new MilestonesSummary(0, 0, 0, 0, null);
+    var hatTricks = items.Count(i => i.Category == "hattrick");
+    var records = items.Count(i => i.Category == "record");
+    var tournament = items.Count(i => i.Category == "tournament");
+    var mostRecent = items.Where(i => i.SortDate.HasValue).OrderByDescending(i => i.SortDate).FirstOrDefault();
+    return new MilestonesSummary(items.Count, hatTricks, records, tournament, mostRecent?.DateDisplay);
+  }
+
+  private List<string> GetMilestoneTeams()
+  {
+    if (_milestones == null) return new List<string>();
+    return _milestones.Select(m => m.Team).Where(t => !string.IsNullOrWhiteSpace(t)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(t => t).ToList()!;
+  }
+
+  private List<MilestoneItem> GetFilteredMilestoneItems(List<MilestoneItem> items)
+  {
+    if (items == null) return new List<MilestoneItem>();
+    if (_milestoneFilter == "all") return items;
+    if (_milestoneFilter == "record" || _milestoneFilter == "hattrick" || _milestoneFilter == "league" || _milestoneFilter == "tournament")
+      return items.Where(i => i.Category == _milestoneFilter).ToList();
+    return items.Where(i => string.Equals(i.Team, _milestoneFilter, StringComparison.OrdinalIgnoreCase)).ToList();
   }
 }
 

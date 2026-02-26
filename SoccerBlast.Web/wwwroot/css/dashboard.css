@@ -88,6 +88,24 @@ body{ margin:0; background:transparent; }
   box-shadow: 0 4px 20px rgba(17,24,39,.04);
 }
 
+/* Card titles */
+.sb-card-title,
+.sb-dashboard-card .section-head h4.sb-card-title,
+.sb-main-matches-card .section-head h4.sb-card-title,
+.sb-right .section-head h4.sb-card-title{
+  font-size: 13px !important;
+  font-weight: 700;
+  letter-spacing: .1em;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin: 0;
+}
+.sb-card-updated{
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
 /* grid spacing driven from vars — align all three columns at top */
 .sb-grid{
   display:grid;
@@ -266,6 +284,9 @@ body{ margin:0; background:transparent; }
 .sb-tier-group{ margin-top: 14px; }
 .sb-tier-group:first-of-type{ margin-top: 8px; }
 .sb-tier-title{
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: .06em;
@@ -276,6 +297,12 @@ body{ margin:0; background:transparent; }
   border-left: 3px solid var(--brand);
   background: linear-gradient(90deg, var(--brand-tint) 0%, transparent 70%);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.sb-tier-icon{
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .sb-list{
@@ -371,8 +398,53 @@ body{ margin:0; background:transparent; }
   object-position:center;
 }
 
-/* Second card: matches section (section-head + blocks) */
+/* Dashboard priority cards (Live Now, Popular Today, Your Teams) — same column, separate cards like hero + matches */
+.sb-dashboard-card{
+  margin-top: var(--gap);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 20px rgba(17,24,39,.04);
+  padding: 16px;
+}
+.sb-dashboard-card .section-head{
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.sb-dashboard-card .section-head h4{
+  margin: 0;
+}
+.sb-dashboard-card .sb-priority-count{
+  font-weight: 700;
+  color: var(--brand);
+  margin-left: 6px;
+}
+.sb-dashboard-card .sb-priority-expand{
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--brand);
+  background: var(--brand-tint);
+  border: 1px solid rgba(245,158,11,.3);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease;
+}
+.sb-dashboard-card .sb-priority-expand:hover{
+  background: var(--brand-tint-strong);
+  border-color: var(--brand);
+}
+
+/* Main matches card (section-head + date + blocks) */
 .sb-main-matches-card{
+  margin-top: var(--gap);
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
@@ -380,24 +452,202 @@ body{ margin:0; background:transparent; }
   padding: 16px;
 }
 
-.section-head{
+/* Section head: stack header row, chips row, date row vertically */
+.sb-main-matches-card .section-head{
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin: 10px 0 12px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  margin: 10px 0 16px;
   position: relative;
   z-index: 100;
 }
-.section-head h4{
+.sb-main-matches-card .section-head h4{
   margin: 0;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text);
 }
 .small-muted{
   color: var(--muted);
   font-size: 12px;
   font-weight: 500;
+}
+
+/* Match scope toggle: Popular | All | Following — theme pill group (scoped to win over globals) */
+.sb-main-matches-card .sb-match-scope-toggle{
+  display: inline-flex;
+  gap: 0;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 3px;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.03);
+}
+.sb-main-matches-card .sb-scope-btn{
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.sb-main-matches-card .sb-scope-btn:hover{
+  color: var(--text);
+  background: var(--hover-bg);
+}
+.sb-main-matches-card .sb-scope-btn.active{
+  color: var(--brand);
+  background: var(--card);
+  box-shadow: 0 1px 3px rgba(17,24,39,.08);
+  font-weight: 700;
+}
+
+/* Quick intent chips — pill style, horizontal row */
+.sb-main-matches-card .sb-quick-chips{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+}
+.sb-main-matches-card .sb-chip{
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
+  box-shadow: 0 1px 2px rgba(17,24,39,.04);
+}
+.sb-main-matches-card .sb-chip:hover{
+  color: var(--text);
+  border-color: rgba(245,158,11,.45);
+  background: var(--hover-bg);
+}
+.sb-main-matches-card .sb-chip.active{
+  color: var(--brand);
+  border-color: var(--brand);
+  background: var(--brand-tint-strong);
+  font-weight: 700;
+}
+
+/* Priority strip: Live Now, Popular Today, Your Teams — each on its own row */
+.sb-main-matches-card .sb-priority-strip{
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  margin: 16px 0 20px;
+  padding: 0 0 20px;
+  border-bottom: 1px solid var(--line);
+}
+.sb-main-matches-card .sb-priority-block{
+  width: 100%;
+  max-width: none;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  box-shadow: 0 4px 20px rgba(17,24,39,.04);
+  transition: box-shadow .2s ease, border-color .2s ease;
+}
+.sb-main-matches-card .sb-priority-block:hover{
+  border-color: rgba(245,158,11,.25);
+  box-shadow: 0 6px 24px rgba(17,24,39,.06);
+}
+.sb-main-matches-card .sb-priority-head{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+.sb-main-matches-card .sb-priority-count{
+  font-weight: 700;
+  color: var(--brand);
+  margin-left: 6px;
+}
+.sb-main-matches-card .sb-priority-expand{
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--brand);
+  background: var(--brand-tint);
+  border: 1px solid rgba(245,158,11,.3);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease;
+}
+.sb-main-matches-card .sb-priority-expand:hover{
+  background: var(--brand-tint-strong);
+  border-color: var(--brand);
+}
+.sb-main-matches-card .sb-priority-list{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Compact match row: must be block+flex so items don't run together (overrides global a) */
+.sb-main-matches-card .sb-compact-row{
+  display: flex !important;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  text-decoration: none !important;
+  color: var(--text) !important;
+  font-size: 13px;
+  background: var(--bg);
+  border: 1px solid transparent;
+  transition: background .15s ease, border-color .15s ease;
+  margin-bottom: 2px;
+}
+.sb-main-matches-card .sb-compact-row:hover{
+  background: var(--hover-bg);
+  border-color: var(--line);
+  color: var(--text) !important;
+}
+.sb-main-matches-card .sb-compact-row.live{
+  border-left: 3px solid var(--red);
+  background: rgba(239,68,68,.04);
+}
+.sb-main-matches-card .sb-compact-teams{
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.sb-main-matches-card .sb-compact-score{
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.sb-main-matches-card .sb-compact-time{
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.sb-main-matches-card .sb-compact-status{
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.sb-main-matches-card .sb-compact-row.live .sb-compact-status{
+  color: var(--red);
+  font-weight: 700;
 }
 
 .block{
@@ -457,8 +707,30 @@ body{ margin:0; background:transparent; }
   word-break:break-word;
 }
 
+.score-wrap{
+  justify-self: end;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 0;
+}
+
+.match-row-league{
+  font-size: 11px;
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+.match-row-league:hover{
+  color: var(--accent, #f59e0b);
+  text-decoration: underline;
+}
+
 .score{
-  justify-self:end;
   display:flex;
   align-items:center;
   gap:10px;
@@ -508,7 +780,6 @@ body{ margin:0; background:transparent; }
   overflow-y: auto;
   z-index: 1; /* below topbar */
 }
-
 .news-item{
   display:flex;
   align-items:center;

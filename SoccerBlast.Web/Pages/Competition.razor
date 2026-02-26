@@ -23,37 +23,56 @@
   }
   else
   {
-    <div class="league-hero">
+    var heroBg = _league.Profile?.BannerUrl ?? _league.Profile?.FanartUrls?.FirstOrDefault();
+    <div class="league-hero comp-hero-premium" style="@(string.IsNullOrWhiteSpace(heroBg) ? "" : $"background-image: url({heroBg});")">
+      <div class="league-hero-overlay"></div>
       <div class="league-hero-content">
         <button class="team-back-btn" @onclick="GoBack">Back</button>
         <div class="league-hero-bottom">
           <div class="league-hero-main">
-            <div class="league-hero-badge">
-              <img src="@(_league.BadgeUrl ?? LeagueIconMap.GetByName(_league.Name) ?? LeagueIconMap.DefaultLeagueIcon)"
+            <div class="league-hero-brand">
+              <img src="@(_league.Profile?.LogoUrl ?? _league.BadgeUrl ?? LeagueIconMap.GetByName(_league.Name) ?? LeagueIconMap.DefaultLeagueIcon)"
                    alt="@_league.Name"
                    loading="lazy"
                    referrerpolicy="no-referrer"
+                   class="league-hero-brand-img"
                    onerror="this.onerror=null; this.src='/images/icons/world-cup.png';" />
             </div>
             <div class="league-hero-text">
               <h1>@_league.Name</h1>
-              @if (!string.IsNullOrWhiteSpace(_league.Country ?? _league.Profile?.Country))
+              @if (!string.IsNullOrWhiteSpace(_league.Profile?.LeagueAlternate))
               {
-                <p class="league-hero-sub">@(_league.Profile?.Country ?? _league.Country)</p>
+                <p class="league-hero-alternate">@_league.Profile.LeagueAlternate</p>
               }
+              <div class="league-hero-subline">
+                @if (!string.IsNullOrWhiteSpace(_league.Country ?? _league.Profile?.Country))
+                {
+                  <span>@(_league.Profile?.Country ?? _league.Country)</span>
+                }
+                @if (!string.IsNullOrWhiteSpace(_league.Profile?.CurrentSeason))
+                {
+                  <span class="league-hero-season">@_league.Profile.CurrentSeason</span>
+                }
+              </div>
             </div>
           </div>
-          <div class="league-hero-meta">
-            <div class="league-meta-item">
-              <span class="league-hero-label">Matches tracked</span>
-              <span class="league-hero-value">@_league.MatchCount</span>
-            </div>
-            @if (_league.Profile?.CurrentSeason != null)
+          <div class="league-hero-chips">
+            @if (!string.IsNullOrWhiteSpace(_league.Profile?.Sport))
             {
-              <div class="league-meta-item">
-                <span class="league-hero-label">Current season</span>
-                <span class="league-hero-value">@_league.Profile.CurrentSeason</span>
-              </div>
+              <span class="comp-chip">@_league.Profile.Sport</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(_league.Profile?.Gender))
+            {
+              <span class="comp-chip">@_league.Profile.Gender</span>
+            }
+            @if (_league.Profile?.FormedYear != null)
+            {
+              <span class="comp-chip">Founded @_league.Profile.FormedYear</span>
+            }
+            <span class="comp-chip">@_league.MatchCount matches</span>
+            @if (!string.IsNullOrWhiteSpace(_league.Profile?.CurrentSeason))
+            {
+              <span class="comp-chip comp-chip-season">@_league.Profile.CurrentSeason</span>
             }
           </div>
         </div>
@@ -66,13 +85,21 @@
           <img src="/images/teams/overview.png" alt="Overview" class="team-tab-icon" />
           <span>Overview</span>
         </button>
+        <button class="team-tab @(_activeTab == "fixtures" ? "active" : "")" @onclick='() => _activeTab = "fixtures"'>
+          <img src="/images/teams/tickets.png" alt="Events" class="team-tab-icon" />
+          <span>Events</span>
+        </button>
         <button class="team-tab @(_activeTab == "teams" ? "active" : "")" @onclick='() => _activeTab = "teams"'>
-          <img src="/images/teams/soccer-player.png" alt="Teams" class="team-tab-icon" />
+          <img src="/images/icons/football-club.png" alt="Teams" class="team-tab-icon" />
           <span>Teams</span>
         </button>
-        <button class="team-tab @(_activeTab == "matches" ? "active" : "")" @onclick='() => _activeTab = "matches"'>
-          <img src="/images/icons/football-pitch.png" alt="Matches" class="team-tab-icon" />
-          <span>Matches</span>
+        <button class="team-tab @(_activeTab == "media" ? "active" : "")" @onclick='() => _activeTab = "media"'>
+          <img src="/images/teams/media.png" alt="Media" class="team-tab-icon" />
+          <span>Media</span>
+        </button>
+        <button class="team-tab @(_activeTab == "details" ? "active" : "")" @onclick="SelectDetailsTab">
+          <img src="/images/teams/overview.png" alt="Details" class="team-tab-icon" />
+          <span>Details</span>
         </button>
         <button class="team-tab @(_activeTab == "seasons" ? "active" : "")" @onclick='() => _activeTab = "seasons"'>
           <img src="/images/icons/pinned.png" alt="Seasons" class="team-tab-icon" />
@@ -83,87 +110,90 @@
       <div class="team-content">
         @if (_activeTab == "overview")
         {
-          <div class="team-tab-content">
-            <div class="team-info-row">
-              <div class="team-info-item">
-                <span class="team-info-label">Matches tracked</span>
-                <span class="team-info-value">@_league.MatchCount</span>
+          <div class="team-tab-content comp-overview">
+            @if (!string.IsNullOrWhiteSpace(_league.Profile?.DescriptionEn))
+            {
+              <div class="comp-card comp-about">
+                <h3 class="team-block-title">About the league</h3>
+                <div class="comp-about-text">@_league.Profile.DescriptionEn</div>
               </div>
-              @if (!string.IsNullOrWhiteSpace(_league.Country ?? _league.Profile?.Country))
+            }
+
+            <div class="comp-card comp-facts">
+              <h3 class="team-block-title">Competition facts</h3>
+              <div class="comp-facts-grid">
+                @if (_league.Profile?.FormedYear != null) { <div class="comp-fact"><span class="comp-fact-label">Formed</span><span class="comp-fact-value">@_league.Profile.FormedYear</span></div> }
+                @if (_league.Profile?.FirstEventDateUtc != null) { <div class="comp-fact"><span class="comp-fact-label">First event</span><span class="comp-fact-value">@_league.Profile.FirstEventDateUtc.Value.ToString("yyyy-MM-dd")</span></div> }
+                @if (!string.IsNullOrWhiteSpace(_league.Profile?.Country)) { <div class="comp-fact"><span class="comp-fact-label">Country</span><span class="comp-fact-value">@_league.Profile.Country</span></div> }
+                @if (!string.IsNullOrWhiteSpace(_league.Profile?.CurrentSeason)) { <div class="comp-fact"><span class="comp-fact-label">Season</span><span class="comp-fact-value">@_league.Profile.CurrentSeason</span></div> }
+                <div class="comp-fact"><span class="comp-fact-label">Matches tracked</span><span class="comp-fact-value">@_league.MatchCount</span></div>
+              </div>
+            </div>
+
+            @{
+              var tvRows = ParseTvRights(_league.Profile?.TvRights);
+              var hasTvRaw = !string.IsNullOrWhiteSpace(_league.Profile?.TvRights);
+            }
+            @if (tvRows.Count > 0)
+            {
+              <div class="comp-card comp-tv">
+                <h3 class="team-block-title">Broadcast rights</h3>
+                <div class="comp-tv-rows">
+                  @foreach (var row in tvRows)
+                  {
+                    <div class="comp-tv-row">
+                      @if (!string.IsNullOrWhiteSpace(row.Region)) { <span class="comp-tv-region">@row.Region</span> }
+                      <span class="comp-tv-broadcaster">@row.Broadcaster</span>
+                      @if (!string.IsNullOrWhiteSpace(row.Term)) { <span class="comp-tv-term">@row.Term</span> }
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+            else if (hasTvRaw)
+            {
+              <div class="comp-card comp-tv">
+                <h3 class="team-block-title">Broadcast rights</h3>
+                <div class="comp-about-text">@_league.Profile!.TvRights</div>
+              </div>
+            }
+
+            @if (HasAnyOfficialLink(_league))
+            {
+              <div class="comp-card comp-links">
+                <h3 class="team-block-title">Official links</h3>
+                <div class="comp-links-row">
+                  @if (!string.IsNullOrWhiteSpace(_league.Profile?.Website)) { <a href="@NormalizeUrl(_league.Profile.Website)" target="_blank" rel="noopener noreferrer" class="comp-link-btn comp-link-website" title="Website"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg></a> }
+                  @if (!string.IsNullOrWhiteSpace(_league.Profile?.Facebook)) { <a href="@NormalizeUrl(_league.Profile.Facebook)" target="_blank" rel="noopener noreferrer" class="comp-link-btn comp-link-facebook" title="Facebook"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></a> }
+                  @if (!string.IsNullOrWhiteSpace(_league.Profile?.Instagram)) { <a href="@NormalizeUrl(_league.Profile.Instagram)" target="_blank" rel="noopener noreferrer" class="comp-link-btn comp-link-instagram" title="Instagram"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.919-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.919.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg></a> }
+                  @if (!string.IsNullOrWhiteSpace(_league.Profile?.Twitter)) { <a href="@NormalizeUrl(_league.Profile.Twitter)" target="_blank" rel="noopener noreferrer" class="comp-link-btn comp-link-twitter" title="X / Twitter"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a> }
+                  @if (!string.IsNullOrWhiteSpace(_league.Profile?.Youtube)) { <a href="@NormalizeUrl(_league.Profile.Youtube)" target="_blank" rel="noopener noreferrer" class="comp-link-btn comp-link-youtube" title="YouTube"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg></a> }
+                  @if (!string.IsNullOrWhiteSpace(_league.Profile?.Rss)) { <a href="@NormalizeUrl(_league.Profile.Rss)" target="_blank" rel="noopener noreferrer" class="comp-link-btn comp-link-rss" title="RSS"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.503 20.752c0 1.794-1.456 3.248-3.251 3.248-1.796 0-3.252-1.454-3.252-3.248 0-1.794 1.456-3.248 3.252-3.248 1.795.001 3.251 1.454 3.251 3.248zm-6.503-12.572v4.811c6.05.462 10.96 4.966 11.422 11.009h4.817c-.457-8.955-7.596-16.106-16.239-16.549V8.18zm0-3.368v10.055c9.499.928 17.15 8.598 18.082 18.055h4.817c-.971-12.304-10.755-22.098-23.055-23.055V4.812z"/></svg></a> }
+                </div>
+              </div>
+            }
+
+            <div class="comp-card comp-visuals">
+              @if (!string.IsNullOrWhiteSpace(_league.Profile?.TrophyUrl))
               {
-                <div class="team-info-item">
-                  <span class="team-info-label">Country</span>
-                  <span class="team-info-value">@(_league.Profile?.Country ?? _league.Country)</span>
+                <div class="comp-visual-item">
+                  <h4 class="comp-visual-label">Trophy</h4>
+                  <img src="@_league.Profile.TrophyUrl" alt="Trophy" class="comp-visual-img" loading="lazy" referrerpolicy="no-referrer" />
                 </div>
               }
-              @if (_league.Profile?.FormedYear != null)
+              @if (!string.IsNullOrWhiteSpace(_league.Profile?.PosterUrl))
               {
-                <div class="team-info-item">
-                  <span class="team-info-label">Established</span>
-                  <span class="team-info-value">@_league.Profile.FormedYear</span>
-                </div>
-              }
-              @if (_league.Profile?.FirstEventDateUtc != null)
-              {
-                <div class="team-info-item">
-                  <span class="team-info-label">First Recorded Event</span>
-                  <span class="team-info-value">@_league.Profile.FirstEventDateUtc.Value.ToString("yyyy-MM-dd")</span>
-                </div>
-              }
-              @if (!string.IsNullOrWhiteSpace(_league.Profile?.Sport))
-              {
-                <div class="team-info-item">
-                  <span class="team-info-label">Sport</span>
-                  <span class="team-info-value">@_league.Profile.Sport</span>
-                </div>
-              }
-              @if (!string.IsNullOrWhiteSpace(_league.Profile?.Gender))
-              {
-                <div class="team-info-item">
-                  <span class="team-info-label">Gender</span>
-                  <span class="team-info-value">@_league.Profile.Gender</span>
-                </div>
-              }
-              @if (!string.IsNullOrWhiteSpace(_league.Profile?.CurrentSeason))
-              {
-                <div class="team-info-item">
-                  <span class="team-info-label">Current Season</span>
-                  <span class="team-info-value">@_league.Profile.CurrentSeason</span>
-                </div>
-              }
-              @if (_league.Profile?.CurrentRound != null)
-              {
-                <div class="team-info-item">
-                  <span class="team-info-label">Current Round</span>
-                  <span class="team-info-value">@_league.Profile.CurrentRound</span>
+                <div class="comp-visual-item">
+                  <h4 class="comp-visual-label">League poster</h4>
+                  <img src="@_league.Profile.PosterUrl" alt="Poster" class="comp-visual-img" loading="lazy" referrerpolicy="no-referrer" />
                 </div>
               }
             </div>
 
-            @if (!string.IsNullOrWhiteSpace(_league.Profile?.DescriptionEn))
-            {
-              <div class="team-section-block">
-                <h3 class="team-block-title">About this league</h3>
-                <div class="team-about-text">
-                  @_league.Profile.DescriptionEn
-                </div>
-              </div>
-            }
-
-            @if (!string.IsNullOrWhiteSpace(_league.Profile?.TvRights))
-            {
-              <div class="team-section-block">
-                <h3 class="team-block-title">TV Rights</h3>
-                <div class="team-about-text">
-                  @_league.Profile.TvRights
-                </div>
-              </div>
-            }
-
             @if (_league.Profile == null)
             {
               <div class="team-empty team-empty-muted">
-                <p class="small-muted">Extended league info (teams, seasons, description) is not available for this competition. You can still view matches in the Matches tab.</p>
+                <p class="small-muted">Extended league info is not available for this competition. You can still view events in the Events tab.</p>
               </div>
             }
           </div>
@@ -197,13 +227,394 @@
             }
           </div>
         }
-        else if (_activeTab == "matches")
+        else if (_activeTab == "media")
+        {
+          <div class="team-tab-content comp-media-tab">
+            <h3 class="team-block-title">Fanarts</h3>
+            @if (_league.Profile?.FanartUrls?.Count > 0)
+            {
+              var fanartList = _league.Profile.FanartUrls.Where(u => !string.IsNullOrWhiteSpace(u)).ToList();
+              <div class="sb-gallery-grid">
+                @for (var i = 0; i < fanartList.Count; i++)
+                {
+                  var idx = i;
+                  var url = fanartList[idx];
+                  <img src="@url"
+                       alt="@(_league.Name) fanart"
+                       class="sb-gallery-img"
+                       loading="lazy"
+                       referrerpolicy="no-referrer"
+                       @onclick='() => OpenCompGallery(idx)' />
+                }
+              </div>
+            }
+            else
+            {
+              <p class="small-muted">No fanarts available for this competition.</p>
+            }
+          </div>
+        }
+        else if (_activeTab == "details")
+        {
+          <div class="team-tab-content comp-details-tab">
+            <h3 class="team-block-title">Technical details</h3>
+            <div class="comp-details-grid">
+              <div class="comp-detail"><span class="comp-fact-label">Matches tracked</span><span class="comp-fact-value">@_league.MatchCount</span></div>
+              @if (!string.IsNullOrWhiteSpace(_league.Country ?? _league.Profile?.Country)) { <div class="comp-detail"><span class="comp-fact-label">Country</span><span class="comp-fact-value">@(_league.Profile?.Country ?? _league.Country)</span></div> }
+              @if (_league.Profile?.FormedYear != null) { <div class="comp-detail"><span class="comp-fact-label">Formed</span><span class="comp-fact-value">@_league.Profile.FormedYear</span></div> }
+              @if (_league.Profile?.FirstEventDateUtc != null) { <div class="comp-detail"><span class="comp-fact-label">First event</span><span class="comp-fact-value">@_league.Profile.FirstEventDateUtc.Value.ToString("yyyy-MM-dd")</span></div> }
+              @if (!string.IsNullOrWhiteSpace(_league.Profile?.Sport)) { <div class="comp-detail"><span class="comp-fact-label">Sport</span><span class="comp-fact-value">@_league.Profile.Sport</span></div> }
+              @if (!string.IsNullOrWhiteSpace(_league.Profile?.Gender)) { <div class="comp-detail"><span class="comp-fact-label">Gender</span><span class="comp-fact-value">@_league.Profile.Gender</span></div> }
+              @if (!string.IsNullOrWhiteSpace(_league.Profile?.CurrentSeason)) { <div class="comp-detail"><span class="comp-fact-label">Current season</span><span class="comp-fact-value">@_league.Profile.CurrentSeason</span></div> }
+              @if (_league.Profile?.CurrentRound != null) { <div class="comp-detail"><span class="comp-fact-label">Current round</span><span class="comp-fact-value">@_league.Profile.CurrentRound</span></div> }
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_leagueId))
+            {
+              <div class="comp-analysis-section">
+                <h3 class="team-block-title comp-analysis-title">League Analysis</h3>
+                @if (_loadingAnalysis)
+                {
+                  <div class="comp-analysis-loading"><GlobalSpinner Message="Loading analysis..." /></div>
+                }
+                else if ((_analysis != null && (_analysis.Seasons?.Count ?? 0) > 0) || (_champions != null && _champions.Count > 0))
+                {
+                  var scopeLabel = _analysisScope == "last10" ? "Last 10 seasons" : _analysisScope == "last5" ? "Last 5 seasons" : "All-time";
+                  var distinctChampions = _championTimelineScoped.Select(c => c.TeamId).Distinct().Count();
+                  var mostTitles = _titlesByClubFromChampions.FirstOrDefault();
+                  var streak = GetLongestChampionStreak();
+                  var avgGoals = _analysis?.LeagueGoalsBySeason?.Count > 0 == true ? (double)_analysis!.LeagueGoalsBySeason.Sum(x => x.TotalGoals) / _analysis.LeagueGoalsBySeason.Count : 0;
+                  var goalsLatest = _analysis?.LeagueGoalsBySeason?.LastOrDefault();
+
+                  <div class="comp-analysis-kpi-row">
+                    @if (_analysis?.Seasons?.Count > 0 == true)
+                    {
+                      <div class="comp-analysis-kpi"><span class="comp-analysis-kpi-value">@_analysis.Seasons.Count</span><span class="comp-analysis-kpi-label">Seasons (standings)</span></div>
+                    }
+                    <div class="comp-analysis-kpi"><span class="comp-analysis-kpi-value">@_championTimelineScoped.Count</span><span class="comp-analysis-kpi-label">Champions</span></div>
+                    <div class="comp-analysis-kpi"><span class="comp-analysis-kpi-value">@distinctChampions</span><span class="comp-analysis-kpi-label">Unique winners</span></div>
+                    @if (goalsLatest != null)
+                    {
+                      <div class="comp-analysis-kpi"><span class="comp-analysis-kpi-value">@(goalsLatest.TeamCount > 0 ? (goalsLatest.TotalGoals / goalsLatest.TeamCount).ToString("F0") : "—")</span><span class="comp-analysis-kpi-label">Avg goals/team (latest)</span></div>
+                    }
+                  </div>
+
+                  <div class="comp-analysis-champion-row comp-analysis-card comp-analysis-champion-card">
+                    <h4 class="comp-analysis-card-title">Champion Timeline</h4>
+                    <p class="comp-analysis-card-subtitle">Champions from honours · @_championScopeLabel</p>
+                    <div class="comp-analysis-champion-hero">
+                      @if (mostTitles != null && !string.IsNullOrWhiteSpace(mostTitles.TeamId))
+                      {
+                        <a href="/team/@mostTitles.TeamId" class="comp-analysis-champion-hero-card comp-analysis-champion-hero-most">
+                          @if (!string.IsNullOrWhiteSpace(mostTitles.TeamBadgeUrl)) { <img src="@mostTitles.TeamBadgeUrl" alt="" class="comp-analysis-champion-hero-crest" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'" /> }
+                          <span class="comp-analysis-champion-hero-label">Most titles</span>
+                          <span class="comp-analysis-champion-hero-name">@mostTitles.TeamName</span>
+                          <span class="comp-analysis-champion-hero-count">@mostTitles.Titles</span>
+                        </a>
+                      }
+                      @if (streak.Count > 1 && !string.IsNullOrWhiteSpace(streak.TeamName))
+                      {
+                        var streakTeam = _titlesByClubFromChampions.FirstOrDefault(t => string.Equals(t.TeamName, streak.TeamName, StringComparison.OrdinalIgnoreCase));
+                        <a href="@(streakTeam != null ? $"/team/{streakTeam.TeamId}" : "#")" class="comp-analysis-champion-hero-card comp-analysis-champion-hero-streak">
+                          @if (streakTeam != null && !string.IsNullOrWhiteSpace(streakTeam.TeamBadgeUrl)) { <img src="@streakTeam.TeamBadgeUrl" alt="" class="comp-analysis-champion-hero-crest" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'" /> }
+                          <span class="comp-analysis-champion-hero-label">Longest streak</span>
+                          <span class="comp-analysis-champion-hero-name">@streak.TeamName</span>
+                          <span class="comp-analysis-champion-hero-count">@streak.Count</span>
+                        </a>
+                      }
+                    </div>
+                    <div class="comp-analysis-champion-header">
+                      <div class="comp-analysis-champion-segmented">
+                        <button type="button" class="comp-analysis-segmented-btn @(_analysisScope == "all" ? "active" : "")" @onclick='() => SetChampionScopeAsync("all")'>All-time</button>
+                        <button type="button" class="comp-analysis-segmented-btn @(_analysisScope == "last10" ? "active" : "")" @onclick='() => SetChampionScopeAsync("last10")'>Last 10</button>
+                        <button type="button" class="comp-analysis-segmented-btn @(_analysisScope == "last5" ? "active" : "")" @onclick='() => SetChampionScopeAsync("last5")'>Last 5</button>
+                      </div>
+                      <div class="comp-analysis-champion-view-toggle">
+                        <button type="button" class="comp-analysis-view-btn @(_championTimelineView == "timeline" ? "active" : "")" @onclick='() => { _championTimelineView = "timeline"; StateHasChanged(); }'>Timeline</button>
+                        <button type="button" class="comp-analysis-view-btn @(_championTimelineView == "leaderboard" ? "active" : "")" @onclick='() => { _championTimelineView = "leaderboard"; StateHasChanged(); }'>Leaderboard</button>
+                      </div>
+                    </div>
+                    @if (_championTimelineView == "timeline")
+                    {
+                      <div class="comp-analysis-champion-scroll-wrap">
+                        <div class="comp-analysis-champion-scroll-fade comp-analysis-champion-fade-left"></div>
+                        <div class="comp-analysis-champion-scroll">
+                          @{
+                            var champions = _championTimelineScoped;
+                          }
+                          @for (var i = 0; i < champions.Count; i++)
+                          {
+                            var c = champions[i];
+                            var (streakStart, streakLen) = GetConsecutiveStreakAt(i);
+                            var isFirstInStreak = streakLen > 0 && i == streakStart;
+                            <div class="comp-analysis-champion-tile @(streakLen > 1 && isFirstInStreak ? "streak-start" : "") @(streakLen > 1 && i == streakStart + streakLen - 1 ? "streak-end" : "")">
+                              <span class="comp-analysis-champion-tile-season">@FormatSeasonShort(c.Season)</span>
+                              <div class="comp-analysis-champion-tile-badge-wrap">
+                                @if (!string.IsNullOrWhiteSpace(c.TeamBadgeUrl))
+                                {
+                                  <a href="/team/@c.TeamId" class="comp-analysis-champion-tile-link" title="@c.TeamName">
+                                    <img src="@c.TeamBadgeUrl" alt="" class="comp-analysis-champion-tile-badge" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'" />
+                                  </a>
+                                }
+                                else
+                                {
+                                  <span class="comp-analysis-champion-tile-badge comp-analysis-champion-tile-placeholder">@(c.TeamName ?? "—")</span>
+                                }
+                                @if (streakLen > 1 && i == streakStart + streakLen - 1 && streakLen >= 2)
+                                {
+                                  <span class="comp-analysis-champion-streak-tag">×@streakLen</span>
+                                }
+                              </div>
+                              <span class="comp-analysis-champion-tile-name" title="@c.TeamName">@(c.TeamName ?? "—")</span>
+                            </div>
+                          }
+                        </div>
+                        <div class="comp-analysis-champion-scroll-fade comp-analysis-champion-fade-right"></div>
+                      </div>
+                    }
+                    else
+                    {
+                      <div class="comp-analysis-champion-leaderboard">
+                        @foreach (var t in _titlesByClubFromChampions.Take(10))
+                        {
+                          var top10 = _titlesByClubFromChampions.Take(10).ToList();
+                          var maxT = top10.Count > 0 ? top10.Max(x => x.Titles) : 0;
+                          var pct = maxT > 0 ? (100.0 * t.Titles / maxT) : 0;
+                          <div class="comp-analysis-champion-lb-row">
+                            @if (!string.IsNullOrWhiteSpace(t.TeamBadgeUrl)) { <a href="/team/@t.TeamId"><img src="@t.TeamBadgeUrl" alt="" class="comp-analysis-champion-lb-crest" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'" /></a> }
+                            <span class="comp-analysis-champion-lb-name">@t.TeamName</span>
+                            <div class="comp-analysis-champion-lb-bar"><div class="comp-analysis-champion-lb-fill" style="width: @(pct.ToString("F1", System.Globalization.CultureInfo.InvariantCulture))%"></div></div>
+                            <span class="comp-analysis-champion-lb-count">@t.Titles</span>
+                          </div>
+                        }
+                      </div>
+                    }
+                  </div>
+
+                  @if (_analysis?.Seasons?.Count > 0 == true)
+                  {
+                  <div class="comp-analysis-charts-row">
+                    <div class="comp-analysis-card comp-analysis-card-half">
+                      <h4 class="comp-analysis-card-title">Points trend (top clubs)</h4>
+                      <p class="comp-analysis-card-subtitle">Top clubs by titles in this league · Tap clubs to toggle lines · Points from standings</p>
+                      <div class="comp-analysis-points-legend">
+                        @for (var i = 0; i < _titlesByClubFromChampions.Count; i++)
+                        {
+                          var t = _titlesByClubFromChampions[i];
+                          var tid = t.TeamId;
+                          var sel = _pointsTrendSelectedTeamIds.Contains(tid);
+                          var hue = (i * 47) % 360;
+                          <button type="button"
+                                  class="comp-analysis-legend-btn @(sel ? "active" : "")"
+                                  style="--line-color: hsl(@hue, 55%, 45%);"
+                                  @onclick="() => TogglePointsTrendTeamAsync(tid)">
+                            <span class="comp-analysis-legend-dot"></span>
+                            <img src="@(t.TeamBadgeUrl ?? "/images/teams/placeholder.png")"
+                                 alt=""
+                                 class="comp-analysis-legend-crest"
+                                 loading="lazy"
+                                 referrerpolicy="no-referrer"
+                                 onerror="this.src='/images/teams/placeholder.png'" />
+                            @t.TeamName
+                          </button>
+                        }
+                      </div>
+                      @{
+                        var ptsClubs = _analysis!.PointsByClubBySeason.Where(x => _pointsTrendSelectedTeamIds.Contains(x.TeamId)).ToList();
+                        var ptsSeasons = _analysis.Seasons;
+                        var ptsMax = ptsClubs.SelectMany(c => c.SeasonPoints).Select(p => p.Points).DefaultIfEmpty(0).Max();
+                        var ptsMin = ptsClubs.Any() ? ptsClubs.SelectMany(c => c.SeasonPoints).Select(p => p.Points).Min() : 0;
+                        var ptsByTeamId = _analysis.PointsByClubBySeason.ToDictionary(c => c.TeamId);
+                      }
+                      <div class="comp-analysis-line-chart comp-analysis-points-chart" style="min-height: 200px;">
+                        @if (ptsSeasons.Count > 0 && ptsClubs.Count > 0 && ptsMax > 0)
+                        {
+                          <div class="comp-analysis-yaxis">
+                            <span>@ptsMax</span>
+                            <span>@((ptsMax + ptsMin) / 2)</span>
+                            <span>@ptsMin</span>
+                          </div>
+                          <svg class="comp-analysis-svg" viewBox="0 0 400 180" preserveAspectRatio="xMidYMid meet">
+                            @{
+                              var w = 400.0; var h = 160.0; var pad = 20.0;
+                            }
+                            @for (var hi = 1; hi <= 3; hi++)
+                            {
+                              var yLine = h + pad - (h * hi / 4);
+                              <line x1="@pad" y1="@yLine" x2="@(w - pad)" y2="@yLine" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3,3" opacity="0.8" />
+                            }
+                            @for (var i = 0; i < _titlesByClubFromChampions.Count; i++)
+                            {
+                              var meta = _titlesByClubFromChampions[i];
+                              if (!_pointsTrendSelectedTeamIds.Contains(meta.TeamId)) continue;
+                              if (!ptsByTeamId.TryGetValue(meta.TeamId, out var club)) continue;
+                              var hue = (i * 47) % 360;
+                              var pts = ptsSeasons.Select(se => club.SeasonPoints.FirstOrDefault(p => p.Season == se)?.Points ?? 0).ToList();
+                              if (pts.All(x => x == 0)) continue;
+                              var ptsNorm = ptsMax > ptsMin ? pts.Select(p => (double)(p - ptsMin) / (ptsMax - ptsMin)).ToList() : pts.Select(_ => 0.5).ToList();
+                              var denom = Math.Max(1, ptsNorm.Count - 1);
+                              var xs = Enumerable.Range(0, ptsNorm.Count).Select(j => pad + (w - 2 * pad) * j / denom).ToList();
+                              var ys = ptsNorm.Select(v => h + pad - v * h).ToList();
+                              <polyline fill="none" stroke="hsl(@hue, 55%, 45%)" stroke-width="2" points="@string.Join(" ", xs.Zip(ys, (x, y) => $"{x:F1},{y:F1}"))" />
+                            }
+                          </svg>
+                          <div class="comp-analysis-line-labels">
+                            @foreach (var se in ptsSeasons.TakeLast(8)) { <span>@se</span> }
+                          </div>
+                        }
+                        else
+                        {
+                          <p class="small-muted">Select clubs above to compare points by season (from standings).</p>
+                        }
+                      </div>
+                    </div>
+                    <div class="comp-analysis-card comp-analysis-card-half">
+                      <h4 class="comp-analysis-card-title">League goals trend</h4>
+                      <p class="comp-analysis-card-subtitle">Total goals in league per season · @scopeLabel</p>
+                      @{
+                        var goalSeasons = _analysis.LeagueGoalsBySeason;
+                        var goalMax = goalSeasons.Select(x => x.TotalGoals).DefaultIfEmpty(0).Max();
+                        var goalMin = goalSeasons.Any() ? goalSeasons.Min(x => x.TotalGoals) : 0;
+                      }
+                      <div class="comp-analysis-line-chart comp-analysis-goals-chart" style="min-height: 200px;">
+                        @if (goalSeasons.Count > 0 && goalMax > 0)
+                        {
+                          <div class="comp-analysis-yaxis comp-analysis-goals-yaxis">
+                            <span>@goalMax</span>
+                            <span>@((goalMax + goalMin) / 2)</span>
+                            <span>@goalMin</span>
+                          </div>
+                          <svg class="comp-analysis-svg" viewBox="0 0 400 180" preserveAspectRatio="xMidYMid meet">
+                            @{
+                              var gs = goalSeasons.Select(g => (double)g.TotalGoals / goalMax).ToList();
+                              var gW = 400.0; var gH = 160.0; var gPad = 20.0;
+                              var gXs = gs.Count > 1 ? Enumerable.Range(0, gs.Count).Select(i => gPad + (gW - 2 * gPad) * i / Math.Max(1, gs.Count - 1)).ToList() : new List<double> { gPad + (gW - 2 * gPad) / 2 };
+                              var gYs = gs.Select(v => gH + gPad - v * gH).ToList();
+                            }
+                            @for (var hi = 1; hi <= 3; hi++)
+                            {
+                              var gyLine = gH + gPad - (gH * hi / 4);
+                              <line x1="@gPad" y1="@gyLine" x2="@(gW - gPad)" y2="@gyLine" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3,3" opacity="0.8" />
+                            }
+                            @for (var gi = 0; gi < gXs.Count; gi++)
+                            {
+                              <line x1="@gXs[gi]" y1="@(gH + gPad)" x2="@gXs[gi]" y2="@gYs[gi]" stroke="var(--comp-analysis-line)" stroke-width="1" stroke-dasharray="2,2" opacity="0.6" />
+                            }
+                            <polyline fill="none" stroke="var(--comp-analysis-line)" stroke-width="2" points="@string.Join(" ", gXs.Zip(gYs, (x, y) => $"{x:F1},{y:F1}"))" />
+                            @for (var gi = 0; gi < gXs.Count; gi++)
+                            {
+                              <circle cx="@gXs[gi]" cy="@gYs[gi]" r="3" fill="var(--comp-analysis-line)" />
+                            }
+                          </svg>
+                          <div class="comp-analysis-line-labels">
+                            @foreach (var ge in goalSeasons.TakeLast(8)) { <span>@ge.Season</span> }
+                          </div>
+                        }
+                        else
+                        {
+                          <p class="small-muted">No goals data.</p>
+                        }
+                      </div>
+                      <p class="comp-analysis-footnote">Sum of goals for all teams (final tables).</p>
+                    </div>
+                  </div>
+                  }
+
+                  @if (_analysis?.Seasons?.Count > 0 == true)
+                  {
+                  <div class="comp-analysis-charts-row comp-analysis-season-row">
+                    <div class="comp-analysis-season-header">
+                      <h4 class="comp-analysis-card-title">Season deep dive</h4>
+                      <div class="sb-filter-custom comp-analysis-season-select" @onclick:stopPropagation="true">
+                        <button type="button" class="sb-filter-btn" @onclick='() => _analysisSeasonDropdownOpen = !_analysisSeasonDropdownOpen'>
+                          <span class="sb-filter-text">@(_analysisSeason == "" ? "Select season" : _analysisSeason)</span>
+                          <span class="sb-filter-arrow">▾</span>
+                        </button>
+                        @if (_analysisSeasonDropdownOpen)
+                        {
+                          <div class="sb-filter-menu">
+                            @foreach (var s in _analysis.Seasons.OrderByDescending(x => x).Take(20))
+                            {
+                              <button type="button" class="sb-filter-option @(s == _analysisSeason ? "active" : "")" @onclick='async () => await OnAnalysisSeasonSelectedAsync(s)'>
+                                @s
+                              </button>
+                            }
+                          </div>
+                        }
+                      </div>
+                    </div>
+                    @if (_loadingAnalysisTable)
+                    {
+                      <div class="comp-analysis-loading"><GlobalSpinner Message="Loading table..." /></div>
+                    }
+                    else if (_analysisSeasonTable != null && _analysisSeasonTable.Count > 0)
+                    {
+                      <div class="comp-analysis-card comp-analysis-card-half">
+                        <h4 class="comp-analysis-card-title">Points distribution</h4>
+                        <p class="comp-analysis-card-subtitle">@_analysisSeason — by rank</p>
+                        @{
+                          var ptMax = _analysisSeasonTable.Max(x => x.Points);
+                        }
+                        <div class="comp-analysis-bars">
+                          @foreach (var row in _analysisSeasonTable.Take(20))
+                          {
+                            var pct = ptMax > 0 ? (100.0 * row.Points / ptMax) : 0;
+                            var isChamp = row.Rank == 1;
+                            var isTop4 = row.Rank <= 4;
+                            var isRelegation = row.Rank > _analysisSeasonTable.Count - 3 && _analysisSeasonTable.Count > 3;
+                            <div class="comp-analysis-bar-row @(isChamp ? "champ" : "") @(isTop4 ? "top4" : "") @(isRelegation ? "relegation" : "")">
+                              <div class="comp-analysis-bar-label"><span>@row.Rank. @row.TeamName</span></div>
+                              <div class="comp-analysis-bar-track"><div class="comp-analysis-bar-fill" style="width: @(pct.ToString("F1", System.Globalization.CultureInfo.InvariantCulture))%"></div><span class="comp-analysis-bar-value">@row.Points</span></div>
+                            </div>
+                          }
+                        </div>
+                        <p class="comp-analysis-footnote">Points by team for selected season.</p>
+                      </div>
+                      <div class="comp-analysis-card comp-analysis-card-half">
+                        <h4 class="comp-analysis-card-title">Goal difference</h4>
+                        <p class="comp-analysis-card-subtitle">@_analysisSeason — diverging</p>
+                        <div class="comp-analysis-gd-bars">
+                          @foreach (var row in _analysisSeasonTable.OrderByDescending(x => x.GoalDifference).Take(20))
+                          {
+                            var maxGd = _analysisSeasonTable.Max(x => Math.Abs(x.GoalDifference));
+                            var isPos = row.GoalDifference >= 0;
+                            var pct = maxGd > 0 ? Math.Min(100, 100.0 * Math.Abs(row.GoalDifference) / maxGd) : 0;
+                            <div class="comp-analysis-gd-row">
+                              <div class="comp-analysis-bar-label"><span>@row.Rank. @row.TeamName</span></div>
+                              <div class="comp-analysis-gd-track">
+                                <div class="comp-analysis-gd-half comp-analysis-gd-left"><div class="comp-analysis-gd-neg" style="@(isPos ? "width: 0" : $"width: {pct}%")"></div></div>
+                                <div class="comp-analysis-gd-zero"></div>
+                                <div class="comp-analysis-gd-half comp-analysis-gd-right"><div class="comp-analysis-gd-pos" style="@(isPos ? $"width: {pct}%" : "width: 0")"></div></div>
+                              </div>
+                              <span class="comp-analysis-gd-value @(isPos ? "pos" : "neg")">@(row.GoalDifference >= 0 ? "+" : "")@row.GoalDifference</span>
+                            </div>
+                          }
+                        </div>
+                        <p class="comp-analysis-footnote">Goal difference for selected season.</p>
+                      </div>
+                    }
+                    else
+                    {
+                      <p class="small-muted">Select a season to see points distribution and goal difference.</p>
+                    }
+                  </div>
+                  }
+                }
+                else if (_analysis != null)
+                {
+                  <p class="small-muted">No standings data available for this league. Run the league table scraper to enable analysis.</p>
+                }
+              </div>
+            }
+          </div>
+        }
+        else if (_activeTab == "fixtures")
         {
           <div class="team-tab-content">
             @if (IsExternalLeague && _league?.Seasons?.Count > 0)
             {
               <div class="league-schedule-header">
-                <h3 class="team-block-title">Fixtures & results</h3>
+                <h3 class="team-block-title">Events & results</h3>
                 <select class="league-season-select" value="@_selectedSeason" @onchange="OnSeasonChanged">
                   @foreach (var s in _league.Seasons.OrderByDescending(x => x))
                   {
@@ -238,8 +649,8 @@
             else
             {
               var nowUtc = DateTime.UtcNow;
-              var upcoming = _matches.Where(m => m.UtcDate > nowUtc).OrderBy(m => m.UtcDate).ToList();
-              var results = _matches.Where(m => m.UtcDate <= nowUtc).OrderByDescending(m => m.UtcDate).ToList();
+              var upcoming = _matches.Where(m => m.UtcDate.UtcDateTime > nowUtc).OrderBy(m => m.UtcDate).ToList();
+              var results = _matches.Where(m => m.UtcDate.UtcDateTime <= nowUtc).OrderByDescending(m => m.UtcDate).ToList();
               <div class="league-matches-sections">
                 @if (upcoming.Count > 0)
                 {
@@ -248,16 +659,16 @@
                     @foreach (var m in upcoming)
                     {
                       <div class="am-match">
-                        <div class="am-time">@(m.UtcDate.TimeOfDay.TotalSeconds > 0 ? FormatLocalTime(m.UtcDate) : m.UtcDate.ToString("yyyy-MM-dd"))</div>
+                        <div class="am-time">@(m.UtcDate.UtcDateTime.TimeOfDay.TotalSeconds > 0 ? FormatLocalTime(m.UtcDate) : m.UtcDate.ToString("yyyy-MM-dd"))</div>
                         <div class="am-team">
-                          <img class="am-crest" src="@(string.IsNullOrWhiteSpace(m.HomeTeamCrestUrl) ? "/images/teams/placeholder.png" : m.HomeTeamCrestUrl)" alt="@m.HomeTeamName" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
-                          <div class="am-name-row"><div class="am-name" title="@m.HomeTeamName">@m.HomeTeamName</div></div>
+                          @if (m.HomeTeamId > 0) { <a href="/team/@m.HomeTeamId"><img class="am-crest" src="@(string.IsNullOrWhiteSpace(m.HomeTeamCrestUrl) ? "/images/teams/placeholder.png" : m.HomeTeamCrestUrl)" alt="@m.HomeTeamName" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" /></a> <div class="am-name-row"><a href="/team/@m.HomeTeamId" class="am-name">@m.HomeTeamName</a></div> }
+                          else { <img class="am-crest" src="@(string.IsNullOrWhiteSpace(m.HomeTeamCrestUrl) ? "/images/teams/placeholder.png" : m.HomeTeamCrestUrl)" alt="@m.HomeTeamName" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" /> <div class="am-name-row"><div class="am-name" title="@m.HomeTeamName">@m.HomeTeamName</div></div> }
                         </div>
                         <div class="am-team">
-                          <img class="am-crest" src="@(string.IsNullOrWhiteSpace(m.AwayTeamCrestUrl) ? "/images/teams/placeholder.png" : m.AwayTeamCrestUrl)" alt="@m.AwayTeamName" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
-                          <div class="am-name-row"><div class="am-name" title="@m.AwayTeamName">@m.AwayTeamName</div></div>
+                          @if (m.AwayTeamId > 0) { <a href="/team/@m.AwayTeamId"><img class="am-crest" src="@(string.IsNullOrWhiteSpace(m.AwayTeamCrestUrl) ? "/images/teams/placeholder.png" : m.AwayTeamCrestUrl)" alt="@m.AwayTeamName" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" /></a> <div class="am-name-row"><a href="/team/@m.AwayTeamId" class="am-name">@m.AwayTeamName</a></div> }
+                          else { <img class="am-crest" src="@(string.IsNullOrWhiteSpace(m.AwayTeamCrestUrl) ? "/images/teams/placeholder.png" : m.AwayTeamCrestUrl)" alt="@m.AwayTeamName" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" /> <div class="am-name-row"><div class="am-name" title="@m.AwayTeamName">@m.AwayTeamName</div></div> }
                         </div>
-                        <div class="am-right"><div class="am-score"><span class="num">@MatchDisplayHelper.FormatScore(m.HomeScore)</span><span class="sep">:</span><span class="num">@MatchDisplayHelper.FormatScore(m.AwayScore)</span></div></div>
+                        <div class="am-right">@if (!string.IsNullOrWhiteSpace(m.ExternalId)) { <a href="/match/@m.ExternalId" class="am-score am-score-link"><span class="num">@MatchDisplayHelper.FormatScore(m.HomeScore)</span><span class="sep">:</span><span class="num">@MatchDisplayHelper.FormatScore(m.AwayScore)</span></a> } else { <div class="am-score"><span class="num">@MatchDisplayHelper.FormatScore(m.HomeScore)</span><span class="sep">:</span><span class="num">@MatchDisplayHelper.FormatScore(m.AwayScore)</span></div> }</div>
                       </div>
                     }
                   </div>
@@ -269,7 +680,7 @@
                     @foreach (var m in results)
                     {
                       <div class="am-match">
-                        <div class="am-time">@(m.UtcDate.TimeOfDay.TotalSeconds > 0 ? FormatLocalTime(m.UtcDate) : m.UtcDate.ToString("yyyy-MM-dd"))</div>
+                        <div class="am-time">@(m.UtcDate.UtcDateTime.TimeOfDay.TotalSeconds > 0 ? FormatLocalTime(m.UtcDate) : m.UtcDate.ToString("yyyy-MM-dd"))</div>
                         <div class="am-team">
                           <img class="am-crest" src="@(string.IsNullOrWhiteSpace(m.HomeTeamCrestUrl) ? "/images/teams/placeholder.png" : m.HomeTeamCrestUrl)" alt="@m.HomeTeamName" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
                           <div class="am-name-row"><div class="am-name" title="@m.HomeTeamName">@m.HomeTeamName</div></div>
@@ -289,67 +700,238 @@
         }
         else if (_activeTab == "seasons")
         {
-          <div class="team-tab-content">
-            <h3 class="team-block-title">Past seasons</h3>
-            @if (_league?.Seasons == null || _league.Seasons.Count == 0)
+          <div class="team-tab-content comp-seasons-tab">
+            <div class="comp-seasons-header">
+              <h3 class="team-block-title">Past Seasons</h3>
+              <p class="comp-seasons-subtitle">@(_seasonListOrdered.Count) seasons available@(string.IsNullOrWhiteSpace(_seasonSearchQuery) ? "" : $" · {_seasonListFiltered.Count} matching")</p>
+              <div class="comp-seasons-controls">
+                <input type="text"
+                       class="comp-season-search"
+                       placeholder="Search season (e.g. 2018)"
+                       @bind="_seasonSearchQuery"
+                       @bind:event="oninput" />
+                <div class="sb-filter-custom @(_seasonDropdownOpen ? "sb-filter-open" : "")" @onclick:stopPropagation="true">
+                  <button type="button" class="sb-filter-btn" @onclick='() => { _sortDropdownOpen = false; _seasonDropdownOpen = !_seasonDropdownOpen; }'>
+                    <span class="sb-filter-text">@(string.IsNullOrEmpty(_selectedSeason) ? "Select season" : _selectedSeason)</span>
+                    <span class="sb-filter-arrow">▾</span>
+                  </button>
+                  @if (_seasonDropdownOpen)
+                  {
+                    <div class="sb-filter-menu">
+                      @foreach (var s in _seasonListFiltered)
+                      {
+                        <button type="button" class="sb-filter-option @(s == _selectedSeason ? "active" : "")" @onclick='async () => { await SelectSeason(s); _seasonDropdownOpen = false; }'>
+                          @s
+                        </button>
+                      }
+                    </div>
+                  }
+                </div>
+                <div class="sb-filter-custom @(_sortDropdownOpen ? "sb-filter-open" : "")" @onclick:stopPropagation="true">
+                  <button type="button" class="sb-filter-btn" @onclick='() => { _seasonDropdownOpen = false; _sortDropdownOpen = !_sortDropdownOpen; }'>
+                    <span class="sb-filter-text">@(_seasonSortOrder == "newest" ? "Newest first" : "Oldest first")</span>
+                    <span class="sb-filter-arrow">▾</span>
+                  </button>
+                  @if (_sortDropdownOpen)
+                  {
+                    <div class="sb-filter-menu">
+                      <button type="button" class="sb-filter-option @(_seasonSortOrder == "newest" ? "active" : "")" @onclick='() => { _seasonSortOrder = "newest"; _sortDropdownOpen = false; }'>Newest first</button>
+                      <button type="button" class="sb-filter-option @(_seasonSortOrder == "oldest" ? "active" : "")" @onclick='() => { _seasonSortOrder = "oldest"; _sortDropdownOpen = false; }'>Oldest first</button>
+                    </div>
+                  }
+                </div>
+              </div>
+            </div>
+            @if (_seasonListOrdered.Count == 0)
             {
               <div class="team-empty">
                 <p class="small-muted">Season history is not available for this league.</p>
               </div>
             }
-            else
+            else if (_seasonListFiltered.Count == 0)
             {
-              <div class="league-seasons-list">
-                @foreach (var s in _league.Seasons.OrderByDescending(x => x))
-                {
-                  <button type="button"
-                          class="league-season-btn @(s == _selectedSeason ? "active" : "")"
-                          @onclick="() => SelectSeason(s)">
-                    @s
-                  </button>
-                }
-              </div>
-              @if (!string.IsNullOrEmpty(_selectedSeason))
-              {
-                <h4 class="league-season-fixtures-title">Fixtures for @_selectedSeason</h4>
-                @if (_loadingSchedule)
-                {
-                  <div class="team-empty team-empty-loading">
-                    <GlobalSpinner Message="Loading fixtures..." />
-                  </div>
-                }
-                else if (_matches != null && _matches.Count > 0)
-                {
-                  <div class="am-list league-season-matches">
-                    @foreach (var m in _matches.OrderBy(m => m.UtcDate))
-                    {
-                      <div class="am-match">
-                        <div class="am-time">@(m.UtcDate.TimeOfDay.TotalSeconds > 0 ? FormatLocalTime(m.UtcDate) : m.UtcDate.ToString("yyyy-MM-dd"))</div>
-                        <div class="am-team">
-                          <img class="am-crest" src="@(string.IsNullOrWhiteSpace(m.HomeTeamCrestUrl) ? "/images/teams/placeholder.png" : m.HomeTeamCrestUrl)" alt="@m.HomeTeamName" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
-                          <div class="am-name-row"><div class="am-name" title="@m.HomeTeamName">@m.HomeTeamName</div></div>
-                        </div>
-                        <div class="am-team">
-                          <img class="am-crest" src="@(string.IsNullOrWhiteSpace(m.AwayTeamCrestUrl) ? "/images/teams/placeholder.png" : m.AwayTeamCrestUrl)" alt="@m.AwayTeamName" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" />
-                          <div class="am-name-row"><div class="am-name" title="@m.AwayTeamName">@m.AwayTeamName</div></div>
-                        </div>
-                        <div class="am-right">
-                          <div class="am-score">
-                            <span class="num">@MatchDisplayHelper.FormatScore(m.HomeScore)</span>
-                            <span class="sep">:</span>
-                            <span class="num">@MatchDisplayHelper.FormatScore(m.AwayScore)</span>
-                          </div>
-                        </div>
-                      </div>
-                    }
-                  </div>
-                }
-                else if (_matches != null)
-                {
-                  <p class="small-muted">No fixtures returned for this season.</p>
-                }
-              }
+              <p class="small-muted">No seasons match your search. Try a different year or clear the search.</p>
             }
+            else if (!string.IsNullOrEmpty(_selectedSeason))
+              {
+                <div class="comp-season-detail-panel">
+                  <div class="comp-season-hero comp-card">
+                    <div class="comp-season-hero-top">
+                      @if (!string.IsNullOrWhiteSpace(_selectedSeasonDetail?.StrBadge))
+                      {
+                        <img src="@_selectedSeasonDetail.StrBadge" alt="" class="comp-season-hero-badge" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'" />
+                      }
+                      <div class="comp-season-hero-text">
+                        <h4 class="comp-season-hero-title">@_league?.Name @_selectedSeason</h4>
+                        @if (!string.IsNullOrWhiteSpace(_selectedSeasonDetail?.StrDescriptionEN))
+                        {
+                          <div class="comp-season-hero-desc">
+                            @if (_seasonDescriptionExpanded)
+                            {
+                              <p>@_selectedSeasonDetail.StrDescriptionEN</p>
+                              <button type="button" class="comp-read-less" @onclick='() => _seasonDescriptionExpanded = false'>Read less</button>
+                            }
+                            else
+                            {
+                              var preview = _selectedSeasonDetail.StrDescriptionEN.Length > 200 ? _selectedSeasonDetail.StrDescriptionEN.Substring(0, 200) + "…" : _selectedSeasonDetail.StrDescriptionEN;
+                              <p>@preview</p>
+                              @if (_selectedSeasonDetail.StrDescriptionEN.Length > 200)
+                              {
+                                <button type="button" class="comp-read-more" @onclick='() => _seasonDescriptionExpanded = true'>Read more</button>
+                              }
+                            }
+                          </div>
+                        }
+                      </div>
+                      @if (!string.IsNullOrWhiteSpace(_selectedSeasonDetail?.StrPoster))
+                      {
+                        <img src="@_selectedSeasonDetail.StrPoster" alt="" class="comp-season-hero-poster" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'" />
+                      }
+                    </div>
+                  </div>
+                  <div class="comp-season-segmented">
+                    <button type="button" class="comp-segmented-btn @(_seasonDetailView == "overview" ? "active" : "")" @onclick='() => _seasonDetailView = "overview"'>Overview</button>
+                    <button type="button" class="comp-segmented-btn @(_seasonDetailView == "table" ? "active" : "")" @onclick='() => _seasonDetailView = "table"'>Table</button>
+                    <button type="button" class="comp-segmented-btn @(_seasonDetailView == "matches" ? "active" : "")" @onclick='() => _seasonDetailView = "matches"'>Matches</button>
+                  </div>
+                  @if (_seasonDetailView == "overview")
+                  {
+                    <div class="comp-card comp-season-overview">
+                      @if (_loadingTable)
+                      {
+                        <div class="comp-season-skeleton"><span class="skeleton-line"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
+                      }
+                      else if (_seasonTable != null && _seasonTable.Count > 0)
+                      {
+                        var totalGoals = _seasonTable.Sum(r => r.GoalsFor);
+                        var top4 = _seasonTable.Take(4).ToList();
+                        var relegation = _seasonTable.TakeLast(3).ToList();
+                        <div class="comp-overview-highlights">
+                          <div class="comp-overview-item"><span class="label">Teams</span><span class="value">@_seasonTable.Count</span></div>
+                          <div class="comp-overview-item"><span class="label">Total goals</span><span class="value">@totalGoals</span></div>
+                          @if (top4.Count > 0)
+                          {
+                            <div class="comp-overview-item comp-overview-top4">
+                              <span class="label">Top 4</span>
+                              <span class="value">@string.Join(", ", top4.Select(r => r.TeamName))</span>
+                            </div>
+                          }
+                          @if (relegation.Count > 0)
+                          {
+                            <div class="comp-overview-item comp-overview-relegation">
+                              <span class="label">Relegation zone</span>
+                              <span class="value">@string.Join(", ", relegation.Select(r => r.TeamName))</span>
+                            </div>
+                          }
+                        </div>
+                      }
+                      else
+                      {
+                        <p class="small-muted">Standings not available for this season.</p>
+                      }
+                    </div>
+                  }
+                  else if (_seasonDetailView == "table")
+                  {
+                    <div class="comp-card comp-standings-wrap">
+                      @if (_loadingTable)
+                      {
+                        <div class="comp-season-skeleton"><span class="skeleton-line"></span><span class="skeleton-line"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
+                      }
+                      else if (_seasonTable != null && _seasonTable.Count > 0)
+                      {
+                        <div class="comp-standings-table-wrap">
+                          <table class="comp-standings-table">
+                            <thead>
+                              <tr>
+                                <th>#</th>
+                                <th>Team</th>
+                                <th>P</th>
+                                <th>W</th>
+                                <th>D</th>
+                                <th>L</th>
+                                <th>GF</th>
+                                <th>GA</th>
+                                <th>GD</th>
+                                <th>Pts</th>
+                                <th>Form</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              @foreach (var row in _seasonTable)
+                              {
+                                var isTop4 = row.Rank <= 4;
+                                var isRelegation = row.Rank > _seasonTable.Count - 3;
+                                <tr class="@(isTop4 ? "row-top4" : "") @(isRelegation ? "row-relegation" : "")">
+                                  <td>@row.Rank</td>
+                                  <td class="team-cell">
+                                    @if (!string.IsNullOrWhiteSpace(row.TeamBadgeUrl)) { <img src="@row.TeamBadgeUrl" alt="" class="standings-badge" loading="lazy" referrerpolicy="no-referrer" /> }
+                                    <span>@row.TeamName</span>
+                                  </td>
+                                  <td>@row.Played</td>
+                                  <td>@row.Win</td>
+                                  <td>@row.Draw</td>
+                                  <td>@row.Loss</td>
+                                  <td>@row.GoalsFor</td>
+                                  <td>@row.GoalsAgainst</td>
+                                  <td>@(row.GoalDifference >= 0 ? "+" : "")@row.GoalDifference</td>
+                                  <td><strong>@row.Points</strong></td>
+                                  <td class="form-cell">@(row.Form ?? "—")</td>
+                                </tr>
+                              }
+                            </tbody>
+                          </table>
+                        </div>
+                      }
+                      else
+                      {
+                        <p class="small-muted">No standings data for this season.</p>
+                      }
+                    </div>
+                  }
+                  else
+                  {
+                    <div class="comp-season-matches-wrap">
+                      @if (_loadingSchedule)
+                      {
+                        <div class="team-empty team-empty-loading"><GlobalSpinner Message="Loading events..." /></div>
+                      }
+                      else if (_matches != null && _matches.Count > 0)
+                      {
+                        var byMonth = _matches.OrderBy(m => m.UtcDate).GroupBy(m => m.UtcDate.ToString("yyyy-MM"));
+                        @foreach (var monthGroup in byMonth)
+                        {
+                          <h4 class="league-section-title">@DateTime.Parse(monthGroup.Key + "-01").ToString("MMMM yyyy")</h4>
+                          <div class="am-list league-season-matches">
+                            @foreach (var m in monthGroup)
+                            {
+                              <div class="am-match">
+                                <div class="am-time">@(m.UtcDate.UtcDateTime.TimeOfDay.TotalSeconds > 0 ? FormatLocalTime(m.UtcDate) : m.UtcDate.ToString("yyyy-MM-dd"))</div>
+                                <div class="am-team">
+                                  @if (m.HomeTeamId > 0) { <a href="/team/@m.HomeTeamId"><img class="am-crest" src="@(string.IsNullOrWhiteSpace(m.HomeTeamCrestUrl) ? "/images/teams/placeholder.png" : m.HomeTeamCrestUrl)" alt="@m.HomeTeamName" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" /></a> <div class="am-name-row"><a href="/team/@m.HomeTeamId" class="am-name">@m.HomeTeamName</a></div> }
+                                  else { <img class="am-crest" src="@(string.IsNullOrWhiteSpace(m.HomeTeamCrestUrl) ? "/images/teams/placeholder.png" : m.HomeTeamCrestUrl)" alt="@m.HomeTeamName" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" /> <div class="am-name-row"><div class="am-name" title="@m.HomeTeamName">@m.HomeTeamName</div></div> }
+                                </div>
+                                <div class="am-team">
+                                  @if (m.AwayTeamId > 0) { <a href="/team/@m.AwayTeamId"><img class="am-crest" src="@(string.IsNullOrWhiteSpace(m.AwayTeamCrestUrl) ? "/images/teams/placeholder.png" : m.AwayTeamCrestUrl)" alt="@m.AwayTeamName" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" /></a> <div class="am-name-row"><a href="/team/@m.AwayTeamId" class="am-name">@m.AwayTeamName</a></div> }
+                                  else { <img class="am-crest" src="@(string.IsNullOrWhiteSpace(m.AwayTeamCrestUrl) ? "/images/teams/placeholder.png" : m.AwayTeamCrestUrl)" alt="@m.AwayTeamName" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/teams/placeholder.png';" /> <div class="am-name-row"><div class="am-name" title="@m.AwayTeamName">@m.AwayTeamName</div></div> }
+                                </div>
+                                <div class="am-right">
+                                  @if (!string.IsNullOrWhiteSpace(m.ExternalId)) { <a href="/match/@m.ExternalId" class="am-score am-score-link"><span class="num">@MatchDisplayHelper.FormatScore(m.HomeScore)</span><span class="sep">:</span><span class="num">@MatchDisplayHelper.FormatScore(m.AwayScore)</span></a> }
+                                  else { <div class="am-score"><span class="num">@MatchDisplayHelper.FormatScore(m.HomeScore)</span><span class="sep">:</span><span class="num">@MatchDisplayHelper.FormatScore(m.AwayScore)</span></div> }
+                                </div>
+                              </div>
+                            }
+                          </div>
+                        }
+                      }
+                      else if (_matches != null)
+                      {
+                        <p class="small-muted">No events for this season.</p>
+                      }
+                    </div>
+                  }
+                </div>
+              }
           </div>
         }
       </div>
@@ -362,19 +944,122 @@
 
   private bool _loading = true;
   private bool _loadingSchedule = false;
+  private bool _loadingTable = false;
   private CompetitionDetailDto? _league;
   private List<MatchDto>? _matches;
+  private List<SeasonDetailDto>? _seasonDetails;
+  private List<LookupTableRowDto>? _seasonTable;
   private string _activeTab = "overview";
   private string _selectedSeason = "";
+  private string _seasonDetailView = "overview"; // overview | table | matches
+  private int _expandedSeasonGroup = 0;
+  private bool _seasonDescriptionExpanded;
+  private string _seasonSearchQuery = "";
+  private string _seasonSortOrder = "newest"; // "newest" | "oldest"
+  private bool _seasonDropdownOpen;
+  private bool _sortDropdownOpen;
+
+  private bool _isCompGalleryOpen;
+  private List<string>? _compGalleryUrls;
+  private int _compGalleryIndex;
+
+  private LeagueAnalysisDto? _analysis;
+  private List<ChampionTimelineItemDto>? _champions; // from honours API (by-external/{id}/champions)
+  private bool _loadingAnalysis;
+  private string _analysisSeason = "";
+  private List<LookupTableRowDto>? _analysisSeasonTable;
+  private bool _loadingAnalysisTable;
+  private string _analysisScope = "all"; // "all" | "last10" | "last5"
+  private string _championTimelineView = "timeline"; // "timeline" | "leaderboard"
+  private List<string> _pointsTrendSelectedTeamIds = new();
+  private bool _analysisSeasonDropdownOpen;
+
+  /// <summary>Champion timeline filtered by scope (from honours API). API returns newest first; we return oldest first for timeline display.</summary>
+  private IReadOnlyList<ChampionTimelineItemDto> _championTimelineScoped
+  {
+    get
+    {
+      if (_champions == null || _champions.Count == 0) return Array.Empty<ChampionTimelineItemDto>();
+      var list = _champions.AsEnumerable();
+      if (_analysisScope == "last10") list = list.TakeLast(10);
+      else if (_analysisScope == "last5") list = list.TakeLast(5);
+      return list.Reverse().ToList();
+    }
+  }
+
+  /// <summary>Titles by club derived from champions API (same data as timeline).</summary>
+  private IReadOnlyList<TitlesByClubDto> _titlesByClubFromChampions
+  {
+    get
+    {
+      if (_champions == null || _champions.Count == 0) return Array.Empty<TitlesByClubDto>();
+      var list = _championTimelineScoped;
+      return list
+        .GroupBy(c => c.TeamId, StringComparer.OrdinalIgnoreCase)
+        .Select(g =>
+        {
+          var first = g.First();
+          return new TitlesByClubDto { TeamId = first.TeamId, TeamName = first.TeamName ?? "", TeamBadgeUrl = first.TeamBadgeUrl, Titles = g.Count() };
+        })
+        .OrderByDescending(t => t.Titles)
+        .ToList();
+    }
+  }
+
+  private string _championScopeLabel
+  {
+    get
+    {
+      var list = _championTimelineScoped;
+      if (list.Count == 0) return "";
+      var first = list.First().Season?.Trim();
+      var last = list.Last().Season?.Trim();
+      if (string.IsNullOrEmpty(first) || string.IsNullOrEmpty(last)) return "";
+      var y1 = first.Length >= 4 ? first.Substring(0, 4) : first;
+      var y2 = last.Length >= 4 ? last.Substring(0, 4) : last;
+      return y1 == y2 ? y1 : $"{y1}–{y2}";
+    }
+  }
 
   private bool IsExternalLeague => _league?.Id == 0;
+  /// <summary>SportsDB league id for table/schedule/seasons API. Prefer DTO ExternalId; when loaded by DB id (e.g. /competition/4328) the API may return Id=4328 but omit ExternalId — fallback to route Id when we have Seasons (backend already used a league id to fetch them).</summary>
+  private string? _leagueId => _league?.ExternalId ?? (IsExternalLeague ? Id : null) ?? ((_league?.Seasons?.Count > 0 && !string.IsNullOrWhiteSpace(Id)) ? Id : null);
+  private SeasonDetailDto? _selectedSeasonDetail => _seasonDetails?.FirstOrDefault(s => s.StrSeason == _selectedSeason);
+  private const int SeasonsPerGroup = 5;
+  private IReadOnlyList<string> _seasonListOrdered => ((_seasonDetails?.Count > 0 ? _seasonDetails.Select(s => s.StrSeason) : _league?.Seasons) ?? Array.Empty<string>()).OrderByDescending(x => x).ToList();
+  private IReadOnlyList<string> _seasonListFiltered
+  {
+    get
+    {
+      var list = _seasonListOrdered.AsEnumerable();
+      if (!string.IsNullOrWhiteSpace(_seasonSearchQuery))
+      {
+        var q = _seasonSearchQuery.Trim();
+        list = list.Where(s => s.Contains(q, StringComparison.OrdinalIgnoreCase));
+      }
+      return (_seasonSortOrder == "newest" ? list.OrderByDescending(x => x) : list.OrderBy(x => x)).ToList();
+    }
+  }
+  private IEnumerable<IGrouping<int, string>> _seasonGroups => _seasonListOrdered.Select((s, i) => (Season: s, GroupIndex: i / SeasonsPerGroup)).GroupBy(x => x.GroupIndex, x => x.Season);
+  private IEnumerable<IGrouping<int, string>> _seasonGroupsFiltered => _seasonListFiltered.Select((s, i) => (Season: s, GroupIndex: i / SeasonsPerGroup)).GroupBy(x => x.GroupIndex, x => x.Season);
 
   protected override async Task OnParametersSetAsync()
   {
     _loading = true;
     _league = null;
     _matches = null;
+    _seasonDetails = null;
+    _seasonTable = null;
     _selectedSeason = "";
+    _seasonDescriptionExpanded = false;
+    _expandedSeasonGroup = 0;
+    _seasonSearchQuery = "";
+    _seasonSortOrder = "newest";
+    _analysis = null;
+    _champions = null;
+    _analysisSeason = "";
+    _analysisSeasonTable = null;
+    _pointsTrendSelectedTeamIds = new List<string>();
 
     try
     {
@@ -383,13 +1068,18 @@
       _league = await Api.GetCompetitionAsync(Id!, cts.Token);
       if (_league != null)
       {
-        if (IsExternalLeague)
+        if (!string.IsNullOrWhiteSpace(_leagueId))
         {
-          _selectedSeason = _league.Profile?.CurrentSeason ?? _league.Seasons?.FirstOrDefault() ?? "";
+          _seasonDetails = await Api.GetSeasonDetailsAsync(_leagueId, cts.Token);
+          var ordered = (_seasonDetails?.Select(s => s.StrSeason).ToList() ?? _league.Seasons ?? new List<string>()).OrderByDescending(x => x).ToList();
+          _selectedSeason = _league.Profile?.CurrentSeason ?? ordered.FirstOrDefault() ?? "";
           if (!string.IsNullOrEmpty(_selectedSeason))
+          {
             await LoadScheduleForSeasonAsync();
+            await LoadTableForSeasonAsync();
+          }
           if (_league.Profile == null)
-            _activeTab = "matches";
+            _activeTab = "fixtures";
         }
         else
         {
@@ -398,7 +1088,7 @@
           var to = today.AddDays(7);
           _matches = await Api.GetRangeAsync(from, to, _league.Id);
           if (_league.Profile == null)
-            _activeTab = "matches";
+            _activeTab = "fixtures";
         }
       }
     }
@@ -414,16 +1104,31 @@
 
   private async Task LoadScheduleForSeasonAsync()
   {
-    if (string.IsNullOrWhiteSpace(Id) || string.IsNullOrWhiteSpace(_selectedSeason)) return;
+    if (string.IsNullOrWhiteSpace(_leagueId) || string.IsNullOrWhiteSpace(_selectedSeason)) return;
     _loadingSchedule = true;
     _matches = null;
     try
     {
-      _matches = await Api.GetLeagueScheduleAsync(Id!, _selectedSeason);
+      _matches = await Api.GetLeagueScheduleAsync(_leagueId, _selectedSeason);
     }
     finally
     {
       _loadingSchedule = false;
+    }
+  }
+
+  private async Task LoadTableForSeasonAsync()
+  {
+    if (string.IsNullOrWhiteSpace(_leagueId) || string.IsNullOrWhiteSpace(_selectedSeason)) return;
+    _loadingTable = true;
+    _seasonTable = null;
+    try
+    {
+      _seasonTable = await Api.GetLookupTableAsync(_leagueId, _selectedSeason);
+    }
+    finally
+    {
+      _loadingTable = false;
     }
   }
 
@@ -432,13 +1137,141 @@
     var season = e.Value?.ToString();
     if (string.IsNullOrEmpty(season)) return;
     _selectedSeason = season;
-    await LoadScheduleForSeasonAsync();
+    _seasonDetailView = "overview";
+    await Task.WhenAll(LoadScheduleForSeasonAsync(), LoadTableForSeasonAsync());
   }
 
   private async Task SelectSeason(string season)
   {
     _selectedSeason = season;
-    await LoadScheduleForSeasonAsync();
+    _seasonDetailView = "overview";
+    await Task.WhenAll(LoadScheduleForSeasonAsync(), LoadTableForSeasonAsync());
+  }
+
+  private async Task SelectDetailsTab()
+  {
+    _activeTab = "details";
+    await LoadAnalysisIfNeededAsync();
+  }
+
+  private async Task LoadAnalysisIfNeededAsync()
+  {
+    if (string.IsNullOrWhiteSpace(_leagueId) || _loadingAnalysis) return;
+    var needAnalysis = _analysis == null;
+    var needChampions = _champions == null;
+    if (!needAnalysis && !needChampions)
+    {
+      _pointsTrendSelectedTeamIds = _titlesByClubFromChampions.Select(t => t.TeamId).ToList();
+      return;
+    }
+    _loadingAnalysis = true;
+    try
+    {
+      var lastN = _analysisScope == "last10" ? 10 : _analysisScope == "last5" ? 5 : (int?)null;
+      if (needAnalysis) _analysis = await Api.GetLeagueAnalysisAsync(_leagueId!, lastN);
+      if (needChampions) _champions = await Api.GetChampionsAsync(_leagueId!);
+      if (_analysis?.Seasons?.Count > 0 == true)
+      {
+        _analysisSeason = _analysis.Seasons.First();
+        _pointsTrendSelectedTeamIds = _titlesByClubFromChampions.Select(t => t.TeamId).ToList();
+        await LoadAnalysisSeasonTableAsync();
+      }
+    }
+    finally
+    {
+      _loadingAnalysis = false;
+    }
+  }
+
+  private async Task LoadAnalysisSeasonTableAsync()
+  {
+    if (string.IsNullOrWhiteSpace(_leagueId) || string.IsNullOrWhiteSpace(_analysisSeason)) return;
+    _loadingAnalysisTable = true;
+    _analysisSeasonTable = null;
+    try
+    {
+      _analysisSeasonTable = await Api.GetLookupTableAsync(_leagueId, _analysisSeason);
+    }
+    finally
+    {
+      _loadingAnalysisTable = false;
+    }
+  }
+
+  private async Task OnAnalysisScopeChange(ChangeEventArgs e)
+  {
+    var v = e.Value?.ToString();
+    if (v != "all" && v != "last10" && v != "last5") return;
+    _analysisScope = v;
+    _analysis = null;
+    await LoadAnalysisIfNeededAsync();
+  }
+
+  private async Task SetChampionScopeAsync(string scope)
+  {
+    if (scope != "all" && scope != "last10" && scope != "last5") return;
+    if (_analysisScope == scope) return;
+    _analysisScope = scope;
+    _analysis = null;
+    await LoadAnalysisIfNeededAsync();
+  }
+
+  private static string FormatSeasonShort(string? season)
+  {
+    if (string.IsNullOrWhiteSpace(season)) return "—";
+    var s = season.Trim();
+    if (s.Length >= 9 && s[4] == '-') return $"{s.Substring(0, 4)}–{s.Substring(7, 2)}";
+    if (s.Length >= 7 && s[4] == '-') return $"{s.Substring(0, 4)}–{s.Substring(5, 2)}";
+    return s;
+  }
+
+  private (string? TeamName, int Count) GetLongestChampionStreak()
+  {
+    var list = _championTimelineScoped;
+    if (list == null || list.Count == 0) return (null, 0);
+    var curId = list[0].TeamId;
+    var curCount = 1;
+    var bestId = curId;
+    var bestCount = 1;
+    for (var i = 1; i < list.Count; i++)
+    {
+      if (list[i].TeamId == curId) curCount++;
+      else { curId = list[i].TeamId; curCount = 1; }
+      if (curCount > bestCount) { bestCount = curCount; bestId = curId; }
+    }
+    var teamName = list.FirstOrDefault(c => c.TeamId == bestId)?.TeamName;
+    return (teamName, bestCount);
+  }
+
+  private (int Index, int Count) GetConsecutiveStreakAt(int index)
+  {
+    var list = _championTimelineScoped;
+    if (list == null || index < 0 || index >= list.Count) return (index, 0);
+    var id = list[index].TeamId;
+    var start = index;
+    while (start > 0 && list[start - 1].TeamId == id) start--;
+    var end = index;
+    while (end < list.Count - 1 && list[end + 1].TeamId == id) end++;
+    return (start, end - start + 1);
+  }
+
+  private async Task OnAnalysisSeasonSelectedAsync(string season)
+  {
+    if (string.IsNullOrEmpty(season)) return;
+    _analysisSeason = season;
+    _analysisSeasonDropdownOpen = false;
+    await LoadAnalysisSeasonTableAsync();
+  }
+
+  private async Task TogglePointsTrendTeamAsync(string teamId)
+  {
+    var list = _pointsTrendSelectedTeamIds.ToList();
+    if (list.Contains(teamId))
+      list = list.Where(x => x != teamId).ToList();
+    else
+      list = list.Append(teamId).ToList();
+    _pointsTrendSelectedTeamIds = list;
+    await InvokeAsync(StateHasChanged);
   }
 
   private async Task GoBack()
@@ -464,5 +1297,80 @@
     var local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utcDate, DateTimeKind.Utc), tz);
     return local.ToString("HH:mm");
   }
+
+  private string FormatLocalTime(DateTimeOffset utcDate) => FormatLocalTime(utcDate.UtcDateTime);
+
+  private static List<TvRightRow> ParseTvRights(string? raw)
+  {
+    var list = new List<TvRightRow>();
+    if (string.IsNullOrWhiteSpace(raw)) return list;
+    var lines = raw.Split(new[] { '\n', '\r', ';' }, StringSplitOptions.RemoveEmptyEntries);
+    foreach (var line in lines)
+    {
+      var s = line.Trim();
+      if (string.IsNullOrWhiteSpace(s)) continue;
+      string? region = null;
+      string broadcaster = s;
+      string? term = null;
+      var termMatch = System.Text.RegularExpressions.Regex.Match(s, @"\s*\[([^\]]+)\]\s*$");
+      if (termMatch.Success)
+      {
+        term = termMatch.Groups[1].Value.Trim();
+        broadcaster = s.Substring(0, termMatch.Index).Trim();
+      }
+      var dash = broadcaster.IndexOf(" - ", StringComparison.Ordinal);
+      if (dash >= 0)
+      {
+        region = broadcaster.Substring(0, dash).Trim();
+        broadcaster = broadcaster.Substring(dash + 3).Trim();
+      }
+      list.Add(new TvRightRow(region, broadcaster, term));
+    }
+    return list;
+  }
+
+  private static string NormalizeUrl(string? url)
+  {
+    if (string.IsNullOrWhiteSpace(url)) return "#";
+    var u = url.Trim();
+    if (!u.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !u.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+      u = "https://" + u;
+    return u;
+  }
+
+  private static bool HasAnyOfficialLink(CompetitionDetailDto? league)
+  {
+    var p = league?.Profile;
+    return !string.IsNullOrWhiteSpace(p?.Website) || !string.IsNullOrWhiteSpace(p?.Facebook) || !string.IsNullOrWhiteSpace(p?.Instagram)
+      || !string.IsNullOrWhiteSpace(p?.Twitter) || !string.IsNullOrWhiteSpace(p?.Youtube) || !string.IsNullOrWhiteSpace(p?.Rss);
+  }
+
+  private void OpenCompGallery(int index)
+  {
+    var urls = _league?.Profile?.FanartUrls?.Where(u => !string.IsNullOrWhiteSpace(u)).ToList();
+    if (urls == null || urls.Count == 0) return;
+    _compGalleryUrls = urls;
+    _compGalleryIndex = index >= 0 && index < urls.Count ? index : 0;
+    _isCompGalleryOpen = true;
+  }
+
+  private void CloseCompGallery()
+  {
+    _isCompGalleryOpen = false;
+  }
+
+  private void PrevCompGalleryImage()
+  {
+    if (_compGalleryUrls == null || _compGalleryUrls.Count == 0) return;
+    _compGalleryIndex = _compGalleryIndex == 0 ? _compGalleryUrls.Count - 1 : _compGalleryIndex - 1;
+  }
+
+  private void NextCompGalleryImage()
+  {
+    if (_compGalleryUrls == null || _compGalleryUrls.Count == 0) return;
+    _compGalleryIndex = (_compGalleryIndex + 1) % _compGalleryUrls.Count;
+  }
+
+  private record TvRightRow(string? Region, string Broadcaster, string? Term);
 }
 

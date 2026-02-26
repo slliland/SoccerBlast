@@ -32,6 +32,9 @@ public static class TeamLikeHelper
     {
         var prefs = await prefsStore.GetAsync();
         
+        if (teamId == 0)
+            return;
+
         if (followedTeamIds.Contains(teamId))
         {
             followedTeamIds.Remove(teamId);

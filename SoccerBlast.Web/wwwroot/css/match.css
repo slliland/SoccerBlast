@@ -1,0 +1,289 @@
+/* Match page: hero with score strip, tabs for Overview / Timeline / Lineups / Stats / Media / TV */
+
+.match-page .match-hero {
+  min-height: 320px;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+}
+
+.match-hero .team-hero-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 16px 24px;
+}
+
+.match-hero-score {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.match-hero-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 160px;
+}
+
+.match-hero-badge {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+}
+
+.match-hero-team-name {
+  font-weight: 700;
+  font-size: 14px;
+  text-align: center;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+.match-hero-vs {
+  min-width: 80px;
+  text-align: center;
+}
+
+.match-hero-score-text {
+  font-size: 28px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+.match-hero-vs-text {
+  font-size: 18px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.9);
+}
+
+.match-hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  font-size: 13px;
+  color: rgba(255,255,255,0.9);
+}
+
+.match-hero-meta span,
+.match-hero-meta a {
+  color: inherit;
+}
+
+.match-hero-venue:hover {
+  text-decoration: underline;
+}
+
+/* Timeline */
+.match-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.match-timeline-item {
+  display: grid;
+  grid-template-columns: 48px 90px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--sb-card-bg, #1f2937);
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.match-timeline-minute {
+  font-weight: 700;
+  color: var(--sb-accent, #f59e0b);
+}
+
+.match-timeline-type {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.match-timeline-player {
+  font-weight: 500;
+}
+
+.match-timeline-team {
+  font-size: 12px;
+  color: var(--sb-muted, #9ca3af);
+}
+
+.match-timeline-detail {
+  grid-column: 3 / -1;
+  font-size: 12px;
+  color: var(--sb-muted, #9ca3af);
+}
+
+/* Lineups */
+.match-lineups-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.match-lineup-team-name {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.match-lineup-player {
+  display: grid;
+  grid-template-columns: 32px 56px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 14px;
+}
+
+.match-lineup-sub {
+  opacity: 0.85;
+}
+
+.match-lineup-num {
+  font-weight: 600;
+  color: var(--sb-muted, #9ca3af);
+}
+
+.match-lineup-pos {
+  font-size: 12px;
+  color: var(--sb-muted, #9ca3af);
+}
+
+/* Stats */
+.match-stats-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.match-stat-row {
+  display: grid;
+  grid-template-columns: 48px 1fr 48px;
+  align-items: center;
+  gap: 12px;
+}
+
+.match-stat-home-val,
+.match-stat-away-val {
+  font-weight: 700;
+  text-align: center;
+  font-size: 15px;
+}
+
+.match-stat-bar-wrap {
+  display: flex;
+  height: 24px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.06);
+}
+
+.match-stat-bar-home {
+  background: var(--sb-accent, #f59e0b);
+  opacity: 0.9;
+}
+
+.match-stat-bar-away {
+  background: #6b7280;
+  opacity: 0.8;
+}
+
+.match-stat-label {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--sb-muted, #9ca3af);
+  text-align: center;
+}
+
+/* Highlights */
+.match-highlights-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.match-highlight-card {
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--sb-card-bg, #1f2937);
+  text-decoration: none;
+  color: inherit;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.match-highlight-card img {
+  width: 100%;
+  aspect-ratio: 16/9;
+  object-fit: cover;
+}
+
+.match-highlight-title {
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.match-highlight-card:hover {
+  border-color: var(--sb-accent, #f59e0b);
+}
+
+/* Media grid */
+.match-media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.match-media-img {
+  width: 100%;
+  border-radius: 10px;
+  aspect-ratio: 16/10;
+  object-fit: cover;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+/* TV & Info */
+.match-filename {
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.match-tv-list {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.match-tv-country {
+  color: var(--sb-muted, #9ca3af);
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .match-lineups-grid {
+    grid-template-columns: 1fr;
+  }
+  .match-timeline-item {
+    grid-template-columns: 40px 1fr;
+  }
+  .match-timeline-type,
+  .match-timeline-player,
+  .match-timeline-team {
+    grid-column: 2;
+  }
+}

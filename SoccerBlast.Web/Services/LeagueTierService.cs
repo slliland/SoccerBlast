@@ -98,6 +98,25 @@ public static class LeagueTierService
         return OtherRegional;
     }
 
+    /// <summary>Curated "Popular" league IDs (TheSportsDB idLeague). Display order for sidebar.</summary>
+    private static readonly int[] PopularLeagueIdsOrdered =
+    {
+        4429, 5513, 5514, 5515, 5516, 5517, 5518, 4502, 5519, 4490, 4499, 4873, 4866, 4496,
+        4480, 4481, 5071, 4328, 4335, 4332, 4331, 4334,
+        4346, 4501
+    };
+
+    private static readonly HashSet<int> PopularLeagueIds = new(PopularLeagueIdsOrdered);
+
+    /// <summary>Ordered popular league IDs for sidebar display.</summary>
+    public static IReadOnlyList<int> GetPopularLeagueIdsOrdered() => PopularLeagueIdsOrdered;
+
+    /// <summary>True if the competition is in the recommended "Popular" set. Only ID is used; name is ignored.</summary>
+    public static bool IsRecommendedPopular(int? competitionId, string? _)
+    {
+        return competitionId.HasValue && competitionId.Value > 0 && PopularLeagueIds.Contains(competitionId.Value);
+    }
+
     /// <summary>Groups leagues by category. Only categories with at least one league are included.</summary>
     public static IReadOnlyList<(string TierLabel, List<LeagueDto> Leagues)> GroupByTier(List<LeagueDto> leagues)
     {

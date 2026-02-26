@@ -2,6 +2,7 @@
 @using Microsoft.AspNetCore.Components.Web
 @rendermode RenderMode.InteractiveServer
 @using SoccerBlast.Shared.Contracts
+@using SoccerBlast.Web.Helpers
 @using SoccerBlast.Web.Services
 @inject SoccerBlast.Web.Services.SoccerApiClient Api
 @inject NavigationManager Nav
@@ -66,7 +67,7 @@
           <img src="/images/teams/overview.png" alt="Overview" class="team-tab-icon" />
           <span>Overview</span>
         </button>
-        <button class="team-tab @(_activeTab == "stadium" ? "active" : "")" @onclick='() => _activeTab = "stadium"'>
+        <button class="team-tab @(_activeTab == "stadium" ? "active" : "")" @onclick="OnStadiumTabClick">
           <img src="/images/teams/stadium-cenit-view-.png" alt="Stadium" class="team-tab-icon" />
           <span>Stadium</span>
         </button>
@@ -144,43 +145,190 @@
                            loading="lazy"
                            referrerpolicy="no-referrer"
                            onerror="this.onerror=null; this.src='/images/icons/world-cup.png';" />
-                      <span class="team-league-name">@entry.Name</span>
+                      @if (entry.Id.HasValue)
+                      { <a href="/competition/@entry.Id.Value" class="team-league-name team-league-link">@entry.Name</a> }
+                      else { <span class="team-league-name">@entry.Name</span> }
                     </div>
                   }
                 </div>
+              </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(_team?.SportsDbTeamId))
+            {
+              <div class="team-section-block team-trophies-section">
+                <h3 class="team-block-title">Trophies</h3>
+                @if (_teamHonours != null && _teamHonours.Count > 0)
+                {
+                  <div class="player-honours-controls">
+                    <span class="player-honours-control-label">Type:</span>
+                    <div class="player-honours-filters">
+                      <button type="button" class="player-honours-filter @(_trophyFilter == "all" ? "active" : "")" @onclick='() => _trophyFilter = "all"'>All</button>
+                      <button type="button" class="player-honours-filter @(_trophyFilter == "league" ? "active" : "")" @onclick='() => _trophyFilter = "league"'>League</button>
+                      <button type="button" class="player-honours-filter @(_trophyFilter == "cup" ? "active" : "")" @onclick='() => _trophyFilter = "cup"'>Cup</button>
+                      <button type="button" class="player-honours-filter @(_trophyFilter == "award" ? "active" : "")" @onclick='() => _trophyFilter = "award"'>Award</button>
+                    </div>
+                  </div>
+                  <div class="player-honours-card-grid">
+                    @foreach (var h in GetFilteredTeamHonours())
+                    {
+                      var imgUrl = !string.IsNullOrWhiteSpace(h.TrophyImageUrl) ? h.TrophyImageUrl : "/images/player/honor.png";
+                      <a href="@h.HonourUrl" target="_blank" rel="noopener noreferrer" class="player-honours-card team-trophy-card">
+                        <img src="@imgUrl" alt="" class="player-honours-card-icon" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/images/player/honor.png';" />
+                        <div class="player-honours-card-body">
+                          <span class="player-honours-card-name">@(h.Title ?? h.Slug)</span>
+                          <div class="player-honours-card-chips">
+                            @if (h.WinnerYears != null)
+                            {
+                              @foreach (var yr in h.WinnerYears.Take(_expandedTrophy == h.IdHonour ? 999 : 6))
+                              {
+                                <span class="player-honours-year-chip">@yr</span>
+                              }
+                              @if (h.WinnerYears.Count > 6 && _expandedTrophy != h.IdHonour)
+                              {
+                                <button type="button" class="player-honours-more-btn" @onclick='() => _expandedTrophy = _expandedTrophy == h.IdHonour ? 0 : h.IdHonour' @onclick:stopPropagation="true">+@(h.WinnerYears.Count - 6) more</button>
+                              }
+                            }
+                          </div>
+                        </div>
+                        <div class="player-honours-card-count">
+                          <span class="player-honours-card-number">@h.Wins</span>
+                          <span class="player-honours-card-label">@(h.Wins == 1 ? "win" : "wins")</span>
+                        </div>
+                      </a>
+                    }
+                  </div>
+                }
+                else
+                {
+                  <p class="team-trophies-empty">No trophies for this team. Run <code>dotnet run --project Scripts/ScrapeTeamHonours -- --db sportsdb_cache.db</code>, then call <code>POST /api/admin/import/honours</code> to load data into the app.</p>
+                }
               </div>
             }
           </div>
         }
         else if (_activeTab == "stadium")
         {
-          <!-- Stadium Info -->
+          <!-- Stadium / Venue tab (enriched from lookup/venue) -->
           <div class="team-tab-content">
             @if (!string.IsNullOrWhiteSpace(_team.Profile.StadiumName))
             {
-              <div class="team-stadium-card">
-                <div class="team-stadium-header">
-                  <img src="/images/teams/arena.png" alt="Stadium" class="team-stadium-icon" />
-                  <h3 class="team-stadium-name">@_team.Profile.StadiumName</h3>
+              @if (_loadingStadium)
+              {
+                <div class="team-stadium-loading">
+                  <GlobalSpinner Message="Loading venue..." />
                 </div>
-                
-                <div class="team-stadium-details">
-                  @if (_team.Profile.StadiumCapacity.HasValue)
+              }
+              else if (_stadium != null)
+              {
+                <div class="team-stadium-enriched">
+                  <div class="team-stadium-hero">
+                    <img src="@(string.IsNullOrWhiteSpace(_stadium.ThumbUrl) ? "/images/teams/court.jpg" : _stadium.ThumbUrl)"
+                         alt="@_stadium.Name"
+                         class="team-stadium-thumb"
+                         loading="lazy"
+                         referrerpolicy="no-referrer"
+                         onerror="this.onerror=null; this.src='/images/teams/court.jpg';" />
+                    <div class="team-stadium-hero-overlay"></div>
+                    <h2 class="team-stadium-title">@_stadium.Name</h2>
+                  </div>
+                  <div class="team-stadium-meta">
+                    @if (_stadium.Capacity.HasValue)
+                    {
+                      <div class="team-stadium-meta-item">
+                        <span class="team-stadium-meta-label">Capacity</span>
+                        <span class="team-stadium-meta-value">@_stadium.Capacity.Value.ToString("N0")</span>
+                      </div>
+                    }
+                    @if (_stadium.FormedYear.HasValue)
+                    {
+                      <div class="team-stadium-meta-item">
+                        <span class="team-stadium-meta-label">Est.</span>
+                        <span class="team-stadium-meta-value">@_stadium.FormedYear</span>
+                      </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_stadium.Location))
+                    {
+                      <div class="team-stadium-meta-item">
+                        <span class="team-stadium-meta-label">Location</span>
+                        <span class="team-stadium-meta-value">@_stadium.Location</span>
+                      </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_stadium.Cost))
+                    {
+                      <div class="team-stadium-meta-item">
+                        <span class="team-stadium-meta-label">Cost</span>
+                        <span class="team-stadium-meta-value">@_stadium.Cost</span>
+                      </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_stadium.Id))
+                    {
+                        <a href="/venue/@_stadium.Id" class="team-stadium-detail-btn">View stadium</a>
+                    }
+                  </div>
+                  @if (!string.IsNullOrWhiteSpace(_stadium.Description))
                   {
-                    <div class="team-stadium-detail">
-                      <span class="team-detail-label">Capacity</span>
-                      <span class="team-detail-value">@_team.Profile.StadiumCapacity.Value.ToString("N0")</span>
+                    <div class="team-section-block team-stadium-description">
+                      <h3 class="team-block-title">About</h3>
+                      <p class="team-stadium-description-text">@_stadium.Description</p>
                     </div>
                   }
-                  
-                  @if (!string.IsNullOrWhiteSpace(_team.Profile.StadiumLocation))
+                  @if (_stadium.FanartUrls != null && _stadium.FanartUrls.Count > 0)
                   {
-                    <div class="team-stadium-detail">
-                      <span class="team-detail-label">Location</span>
-                      <span class="team-detail-value">@_team.Profile.StadiumLocation</span>
+                    <div class="team-section-block">
+                      <h3 class="team-block-title">Gallery</h3>
+                      <div class="sb-gallery-grid">
+                        @for (var i = 0; i < _stadium.FanartUrls.Count; i++)
+                        {
+                          var url = _stadium.FanartUrls[i];
+                          <img src="@url"
+                               alt="@_stadium.Name gallery"
+                               class="sb-gallery-img"
+                               loading="lazy"
+                               referrerpolicy="no-referrer"
+                               onerror="this.style.display='none';"
+                               @onclick="() => OpenStadiumGallery(i)" />
+                        }
+                      </div>
                     </div>
                   }
+                  @if ((_stadium.Latitude.HasValue && _stadium.Longitude.HasValue) || !string.IsNullOrWhiteSpace(_stadium.MapCoordinates))
+                  {
+                    <LocationMap MapElementId="stadium-map" Latitude="@_stadium.Latitude" Longitude="@_stadium.Longitude" MapCoordinates="@_stadium.MapCoordinates" Country="@_stadium.Country" VenueName="@_stadium.Name" />
+                  }
                 </div>
+              }
+              else
+              {
+                <div class="team-stadium-fallback">
+                  <div class="team-stadium-header">
+                    <img src="/images/teams/court.jpg" alt="Stadium" class="team-stadium-icon" />
+                    <h3 class="team-stadium-name">@_team.Profile.StadiumName</h3>
+                  </div>
+                  <div class="team-stadium-details">
+                    @if (_team.Profile.StadiumCapacity.HasValue)
+                    {
+                      <div class="team-stadium-detail">
+                        <span class="team-detail-label">Capacity</span>
+                        <span class="team-detail-value">@_team.Profile.StadiumCapacity.Value.ToString("N0")</span>
+                      </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_team.Profile.StadiumLocation))
+                    {
+                      <div class="team-stadium-detail">
+                        <span class="team-detail-label">Location</span>
+                        <span class="team-detail-value">@_team.Profile.StadiumLocation</span>
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+            }
+            else
+            {
+              <div class="team-empty">
+                <h3>No stadium info</h3>
+                <p class="small-muted">Stadium not set for this team.</p>
               </div>
             }
           </div>
@@ -214,19 +362,41 @@
 
                 else if (_activeTab == "kit")
         {
-          <!-- Team Kit, Fanart (v2), Social -->
+          <!-- Team Kit, Fanart (v2), Social, Primary Colours -->
           <div class="team-tab-content">
+            @if (!string.IsNullOrWhiteSpace(_team.Profile.PrimaryColor) ||
+                 !string.IsNullOrWhiteSpace(_team.Profile.SecondaryColor) ||
+                 !string.IsNullOrWhiteSpace(_team.Profile.TertiaryColor))
+            {
+              <div class="team-section-block">
+                <h3 class="team-block-title">Club Colours</h3>
+                <div class="team-colours-row">
+                  @if (!string.IsNullOrWhiteSpace(_team.Profile.PrimaryColor))
+                  {
+                    <div class="team-colour-swatch" style="background: @ToCssColor(_team.Profile.PrimaryColor);" title="Primary">Primary</div>
+                  }
+                  @if (!string.IsNullOrWhiteSpace(_team.Profile.SecondaryColor))
+                  {
+                    <div class="team-colour-swatch" style="background: @ToCssColor(_team.Profile.SecondaryColor);" title="Secondary">Secondary</div>
+                  }
+                  @if (!string.IsNullOrWhiteSpace(_team.Profile.TertiaryColor))
+                  {
+                    <div class="team-colour-swatch" style="background: @ToCssColor(_team.Profile.TertiaryColor);" title="Tertiary">Tertiary</div>
+                  }
+                </div>
+              </div>
+            }
             @if (_team.Profile.FanartUrls != null && _team.Profile.FanartUrls.Count > 0)
             {
               <div class="team-section-block">
                 <h3 class="team-block-title">Gallery</h3>
-                <div class="team-fanart-grid">
+                <div class="sb-gallery-grid">
                   @for (var i = 0; i < _team.Profile.FanartUrls.Count; i++)
                   {
                     var url = _team.Profile.FanartUrls[i];
                     <img src="@url"
                          alt="@_team.Name gallery image"
-                         class="team-fanart-img"
+                         class="sb-gallery-img"
                          loading="lazy"
                          referrerpolicy="no-referrer"
                          onerror="this.style.display='none';"
@@ -298,6 +468,17 @@
         {
           <!-- Players Roster -->
           <div class="team-tab-content">
+            <div class="team-viewbar">
+                <span class="team-viewbar-label">View:</span>
+                <button class="team-viewbtn @(_playerView==PlayerViewMode.Cutouts?"active":"")"
+                        @onclick="() => _playerView = PlayerViewMode.Cutouts">Cutouts</button>
+                <button class="team-viewbtn @(_playerView==PlayerViewMode.Thumbs?"active":"")"
+                        @onclick="() => _playerView = PlayerViewMode.Thumbs">Thumbs</button>
+                <button class="team-viewbtn @(_playerView==PlayerViewMode.Renders?"active":"")"
+                        @onclick="() => _playerView = PlayerViewMode.Renders">Renders</button>
+                <button class="team-viewbtn @(_playerView==PlayerViewMode.Cartoon?"active":"")"
+                        @onclick="() => _playerView = PlayerViewMode.Cartoon">Cartoon</button>
+            </div>
             @if (_loadingPlayers)
             {
               <div class="team-players-loading">
@@ -317,19 +498,40 @@
                   <div class="team-players-grid">
                     @foreach (var player in group)
                     {
-                      <div class="team-player-card">
-                        <img src="@(player.ThumbUrl ?? "/images/icons/soccer-player.png")" 
-                             alt="@player.Name" 
-                             class="team-player-photo"
-                             loading="lazy"
-                             referrerpolicy="no-referrer"
-                             onerror="this.src='/images/icons/soccer-player.png';" />
+                      <div class="team-player-card" @onclick="() => GoPlayer(player)" role="button" tabindex="0" style="cursor: @(string.IsNullOrWhiteSpace(player.SportsDbPlayerId) ? "default" : "pointer");">
+                        <img src="@(PickPlayerImage(player))"
+                            alt="@player.Name"
+                            class="team-player-photo"
+                            loading="lazy"
+                            referrerpolicy="no-referrer"
+                            onerror="this.src='/images/icons/soccer-player.png';" />
                         <div class="team-player-info">
                           <h4 class="team-player-name">@player.Name</h4>
-                          <div class="team-player-details">
+                          <div class="team-player-number">@(string.IsNullOrWhiteSpace(player.JerseyNumber) ? "—" : "#" + player.JerseyNumber)</div>
+                          <div class="team-player-tags">
                             @if (!string.IsNullOrEmpty(player.Nationality))
                             {
-                              <span class="team-player-nationality">@player.Nationality</span>
+                              <span class="team-player-tag">@(CountryFlagHelper.CountryFlag(player.Nationality)) @player.Nationality</span>
+                            }
+                            @if (player.Age.HasValue)
+                            {
+                              <span class="team-player-tag">@player.Age yrs</span>
+                            }
+                            @if (!string.IsNullOrEmpty(player.Wage))
+                            {
+                              <span class="team-player-tag">@player.Wage</span>
+                            }
+                            @if (!string.IsNullOrEmpty(player.StrSigning))
+                            {
+                              <span class="team-player-tag">@player.StrSigning</span>
+                            }
+                            @if (!string.IsNullOrEmpty(player.Height))
+                            {
+                              <span class="team-player-tag">@player.Height</span>
+                            }
+                            @if (!string.IsNullOrEmpty(player.Weight))
+                            {
+                              <span class="team-player-tag">@player.Weight</span>
                             }
                           </div>
                         </div>
@@ -377,19 +579,19 @@
     </div>
   }
 
-  @if (_isGalleryOpen && _team?.Profile?.FanartUrls?.Count > 0)
+  @if (_isGalleryOpen && _galleryUrls != null && _galleryUrls.Count > 0)
   {
-    <div class="team-gallery-overlay" @onclick="CloseGallery">
-      <div class="team-gallery-modal" @onclick:stopPropagation="true">
-        <button type="button" class="team-gallery-close" @onclick="CloseGallery" aria-label="Close gallery">×</button>
-        <button type="button" class="team-gallery-nav team-gallery-nav-prev" @onclick="PrevGalleryImage" aria-label="Previous image">‹</button>
-        <img src="@_team.Profile.FanartUrls[_activeGalleryIndex]"
-             alt="@_team.Name gallery image"
-             class="team-gallery-img"
+    <div class="sb-gallery-overlay" @onclick="CloseGallery">
+      <div class="sb-gallery-modal" @onclick:stopPropagation="true">
+        <button type="button" class="sb-gallery-close" @onclick="CloseGallery" aria-label="Close gallery">×</button>
+        <button type="button" class="sb-gallery-nav sb-gallery-nav-prev" @onclick="PrevGalleryImage" aria-label="Previous image">‹</button>
+        <img src="@_galleryUrls[_activeGalleryIndex]"
+             alt="Gallery image"
+             class="sb-gallery-img"
              loading="lazy"
              referrerpolicy="no-referrer"
              onerror="this.style.display='none';" />
-        <button type="button" class="team-gallery-nav team-gallery-nav-next" @onclick="NextGalleryImage" aria-label="Next image">›</button>
+        <button type="button" class="sb-gallery-nav sb-gallery-nav-next" @onclick="NextGalleryImage" aria-label="Next image">›</button>
       </div>
     </div>
   }
@@ -410,13 +612,59 @@
   private bool _loadingPlayers = false;
   private List<TeamPlayerDto>? _players;
 
+  private StadiumDetailDto? _stadium;
+  private bool _loadingStadium = false;
+
+  private List<TeamHonourDto>? _teamHonours;
+  private string _trophyFilter = "all";
+  private int _expandedTrophy;
+
   private bool _isGalleryOpen;
   private int _activeGalleryIndex;
+  private List<string>? _galleryUrls;
 
   private bool IsExternalTeam => _team?.Id == 0;
 
   private DateOnly _matchesFrom = DateOnly.FromDateTime(DateTime.Today.AddDays(-30));
   private DateOnly _matchesTo   = DateOnly.FromDateTime(DateTime.Today.AddDays(30));
+
+  // player
+  private PlayerViewMode _playerView = PlayerViewMode.Cutouts;
+
+  private enum PlayerViewMode
+  {
+    Cutouts,
+    Thumbs,
+    Renders,
+    Cartoon
+  }
+
+  private string PickPlayerImage(TeamPlayerDto p)
+  {
+    return _playerView switch
+    {
+      PlayerViewMode.Cutouts => p.CutoutUrl ?? p.ThumbUrl ?? "/images/icons/soccer-player.png",
+      PlayerViewMode.Renders => p.RenderUrl ?? p.ThumbUrl ?? "/images/icons/soccer-player.png",
+      PlayerViewMode.Cartoon => p.CartoonUrl ?? p.CutoutUrl ?? p.ThumbUrl ?? "/images/icons/soccer-player.png",
+      _ => p.ThumbUrl ?? "/images/icons/soccer-player.png",
+    };
+  }
+
+  private static string ToCssColor(string? value)
+  {
+    if (string.IsNullOrWhiteSpace(value)) return "transparent";
+    var v = value!.Trim();
+    if (v.StartsWith("#")) return v;
+    if (v.Length == 6 && System.Text.RegularExpressions.Regex.IsMatch(v, @"^[0-9A-Fa-f]+$")) return "#" + v;
+    return v;
+  }
+
+  private IEnumerable<TeamHonourDto> GetFilteredTeamHonours()
+  {
+    if (_teamHonours == null) return Enumerable.Empty<TeamHonourDto>();
+    if (_trophyFilter == "all") return _teamHonours;
+    return _teamHonours.Where(h => string.Equals(h.TypeGuess, _trophyFilter, StringComparison.OrdinalIgnoreCase));
+  }
 
   private async Task GoBack()
   {
@@ -446,6 +694,19 @@
         StartAutoSync();
         _ = InvokeAsync(SyncProfileInBackground);
       }
+      if (_team != null && !string.IsNullOrWhiteSpace(_team.SportsDbTeamId))
+      {
+        try
+        {
+          _teamHonours = await Api.GetTeamHonoursAsync(_team.SportsDbTeamId, cts.Token);
+        }
+        catch
+        {
+          _teamHonours = null; // honours optional; team page still works
+        }
+      }
+      else
+        _teamHonours = null;
     }
     catch (OperationCanceledException)
     {
@@ -543,12 +804,27 @@
     }
   }
 
+  private void GoPlayer(TeamPlayerDto p)
+  {
+    if (!string.IsNullOrWhiteSpace(p.SportsDbPlayerId))
+      Nav.NavigateTo($"/player/{p.SportsDbPlayerId}");
+  }
+
   private void OpenGallery(int index)
   {
     if (_team?.Profile?.FanartUrls == null || _team.Profile.FanartUrls.Count == 0)
       return;
-
+    _galleryUrls = _team.Profile.FanartUrls;
     _activeGalleryIndex = Math.Clamp(index, 0, _team.Profile.FanartUrls.Count - 1);
+    _isGalleryOpen = true;
+  }
+
+  private void OpenStadiumGallery(int index)
+  {
+    if (_stadium?.FanartUrls == null || _stadium.FanartUrls.Count == 0)
+      return;
+    _galleryUrls = _stadium.FanartUrls;
+    _activeGalleryIndex = Math.Clamp(index, 0, _stadium.FanartUrls.Count - 1);
     _isGalleryOpen = true;
   }
 
@@ -559,18 +835,45 @@
 
   private void NextGalleryImage()
   {
-    if (_team?.Profile?.FanartUrls == null || _team.Profile.FanartUrls.Count == 0)
-      return;
-
-    _activeGalleryIndex = (_activeGalleryIndex + 1) % _team.Profile.FanartUrls.Count;
+    if (_galleryUrls == null || _galleryUrls.Count == 0) return;
+    _activeGalleryIndex = (_activeGalleryIndex + 1) % _galleryUrls.Count;
   }
 
   private void PrevGalleryImage()
   {
-    if (_team?.Profile?.FanartUrls == null || _team.Profile.FanartUrls.Count == 0)
-      return;
+    if (_galleryUrls == null || _galleryUrls.Count == 0) return;
+    _activeGalleryIndex = (_activeGalleryIndex - 1 + _galleryUrls.Count) % _galleryUrls.Count;
+  }
 
-    _activeGalleryIndex = (_activeGalleryIndex - 1 + _team.Profile.FanartUrls.Count) % _team.Profile.FanartUrls.Count;
+  private async Task OnStadiumTabClick()
+  {
+    _activeTab = "stadium";
+    await LoadStadiumIfNeeded();
+    await Task.Yield();
+    try { await JSRuntime.InvokeVoidAsync("soccerBlastMaps.resizeVenueMap", "stadium-map"); } catch { }
+  }
+
+  private async Task LoadStadiumIfNeeded()
+  {
+    if (_team == null || _stadium != null || _loadingStadium) return;
+    if (string.IsNullOrWhiteSpace(_team.Profile?.StadiumName)) return;
+    _loadingStadium = true;
+    try
+    {
+      var teamId = IsExternalTeam && !string.IsNullOrWhiteSpace(_team.SportsDbTeamId)
+        ? _team.SportsDbTeamId!
+        : _team.Id.ToString();
+      _stadium = await Api.GetTeamVenueAsync(teamId);
+    }
+    catch
+    {
+      _stadium = null;
+    }
+    finally
+    {
+      _loadingStadium = false;
+      await InvokeAsync(StateHasChanged);
+    }
   }
 
   // player grouped by position

@@ -1,0 +1,80 @@
+@using SoccerBlast.Shared.Contracts
+@using SoccerBlast.Web.Services
+@inject NavigationManager Nav
+
+<div class="match-row">
+    <div class="time-pill">@Time</div>
+    <div class="team">
+        <img class="team-crest"
+             src="@(string.IsNullOrWhiteSpace(Match.HomeTeamCrestUrl) ? "images/teams/placeholder.png" : Match.HomeTeamCrestUrl)"
+             alt="@Match.HomeTeamName"
+             loading="lazy"
+             decoding="async"
+             referrerpolicy="no-referrer"
+             onload="this.classList.add('loaded');"
+             onerror="this.onerror=null; this.src='images/teams/placeholder.png'; this.classList.add('loaded');"
+             @onclick='() => Nav.NavigateTo($"/team/{Match.HomeTeamId}")'
+             style="cursor: pointer;" />
+        <div class="name-row">
+            <div class="name" title="@Match.HomeTeamName" @onclick='() => Nav.NavigateTo($"/team/{Match.HomeTeamId}")' style="cursor: pointer;">@Match.HomeTeamName</div>
+            <button class="sb-likebtn @(HomeLiked ? "liked" : "")"
+                    title="Like team"
+                    @onclick="() => OnToggleLike.InvokeAsync((Match.HomeTeamId, Match.HomeTeamName, Match.HomeTeamCrestUrl))"
+                    @onclick:stopPropagation="true">
+                <img class="sb-likeimg" src="@HomeLikeIcon" alt="like" />
+            </button>
+        </div>
+    </div>
+    <div class="team">
+        <img class="team-crest"
+             src="@(string.IsNullOrWhiteSpace(Match.AwayTeamCrestUrl) ? "images/teams/placeholder.png" : Match.AwayTeamCrestUrl)"
+             alt="@Match.AwayTeamName"
+             loading="lazy"
+             decoding="async"
+             referrerpolicy="no-referrer"
+             onload="this.classList.add('loaded');"
+             onerror="this.onerror=null; this.src='images/teams/placeholder.png'; this.classList.add('loaded');"
+             @onclick='() => Nav.NavigateTo($"/team/{Match.AwayTeamId}")'
+             style="cursor: pointer;" />
+        <div class="name-row">
+            <div class="name" title="@Match.AwayTeamName" @onclick='() => Nav.NavigateTo($"/team/{Match.AwayTeamId}")' style="cursor: pointer;">@Match.AwayTeamName</div>
+            <button class="sb-likebtn @(AwayLiked ? "liked" : "")"
+                    title="Like team"
+                    @onclick="() => OnToggleLike.InvokeAsync((Match.AwayTeamId, Match.AwayTeamName, Match.AwayTeamCrestUrl))"
+                    @onclick:stopPropagation="true">
+                <img class="sb-likeimg" src="@AwayLikeIcon" alt="like" />
+            </button>
+        </div>
+    </div>
+    <div class="score-wrap">
+        <div class="score" @onclick="OpenMatch" style="@(HasMatchLink ? "cursor: pointer;" : "")">
+            <div class="num">@MatchDisplayHelper.FormatScore(Match.HomeScore)</div>
+            <div class="num">:</div>
+            <div class="num">@MatchDisplayHelper.FormatScore(Match.AwayScore)</div>
+            <div class="status @(MatchDisplayHelper.IsLiveStatus(Match.Status) ? "live" : "")">
+                @Match.Status
+            </div>
+        </div>
+        @if (Match.CompetitionId > 0 && !string.IsNullOrWhiteSpace(Match.CompetitionName))
+        {
+            <a href="/competition/@Match.CompetitionId" class="match-row-league" @onclick:stopPropagation="true">@Match.CompetitionName</a>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public MatchDto Match { get; set; } = null!;
+    [Parameter] public string Time { get; set; } = "";
+    [Parameter] public bool HomeLiked { get; set; }
+    [Parameter] public bool AwayLiked { get; set; }
+    [Parameter] public string HomeLikeIcon { get; set; } = "";
+    [Parameter] public string AwayLikeIcon { get; set; } = "";
+    [Parameter] public EventCallback<(int teamId, string name, string?)> OnToggleLike { get; set; }
+
+    private bool HasMatchLink => !string.IsNullOrWhiteSpace(Match.ExternalId);
+
+    private void OpenMatch()
+    {
+        if (HasMatchLink) Nav.NavigateTo("/match/" + Match.ExternalId);
+    }
+}

@@ -1,9 +1,16 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using SoccerBlast.Shared.Contracts;
 
 namespace SoccerBlast.Web.Services;
 
 public record SyncResult(int syncedMatches);
+
+/// <summary>API returns camelCase; use case-insensitive so externalId maps to ExternalId, etc.</summary>
+internal static class ApiJson
+{
+    public static readonly JsonSerializerOptions Options = new() { PropertyNameCaseInsensitive = true };
+}
 
 public record SyncStatus(
     string message,
@@ -57,10 +64,15 @@ public class SoccerApiClient
     {
         var s = date.ToString("yyyy-MM-dd");
         var resp = await _http.PostAsync($"api/Matches/date/{s}?{TzQuery()}", content: null);
-        resp.EnsureSuccessStatusCode();
+        if (!resp.IsSuccessStatusCode)
+        {
+            var errBody = await resp.Content.ReadAsStringAsync();
+            var msg = !string.IsNullOrWhiteSpace(errBody) ? errBody : resp.ReasonPhrase ?? "Sync failed";
+            throw new HttpRequestException($"Sync failed ({resp.StatusCode}): {msg}");
+        }
 
-        var body = await resp.Content.ReadFromJsonAsync<int>();
-        return body;
+        var synced = await resp.Content.ReadFromJsonAsync<int>();
+        return synced;
     }
 
     public async Task<int> SyncTodayAsync()
@@ -165,6 +177,19 @@ public class SoccerApiClient
         return await _http.GetFromJsonAsync<List<TeamPlayerDto>>($"api/teams/by-external/{Uri.EscapeDataString(sportsDbId)}/players", ct) ?? new List<TeamPlayerDto>();
     }
 
+    public async Task<List<TeamHonourDto>> GetTeamHonoursAsync(string sportsDbTeamId, CancellationToken ct = default)
+        => await _http.GetFromJsonAsync<List<TeamHonourDto>>($"api/teams/honours/{Uri.EscapeDataString(sportsDbTeamId)}", ct) ?? new List<TeamHonourDto>();
+
+    /// <summary>GET venue/stadium for a team (id = DB id or external SportsDB id). Returns null on 404.</summary>
+    public async Task<StadiumDetailDto?> GetTeamVenueAsync(string teamId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(teamId)) return null;
+        using var resp = await _http.GetAsync($"api/teams/{Uri.EscapeDataString(teamId)}/venue", ct);
+        if (resp.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+        resp.EnsureSuccessStatusCode();
+        return await resp.Content.ReadFromJsonAsync<StadiumDetailDto>(ct);
+    }
+
     // Returns (success, message). On 404 or failure, success is false
     public async Task<(bool ok, string message)> SyncTeamProfileAsync(int id)
     {
@@ -184,7 +209,7 @@ public class SoccerApiClient
         if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
         resp.EnsureSuccessStatusCode();
-        return await resp.Content.ReadFromJsonAsync<CompetitionDetailDto>(ct);
+        return await resp.Content.ReadFromJsonAsync<CompetitionDetailDto>(ApiJson.Options, ct);
     }
 
     // v2 schedule/league: all fixtures/results for a league season. Pass league id (external) when league.Id is 0
@@ -194,6 +219,43 @@ public class SoccerApiClient
         var list = await _http.GetFromJsonAsync<List<MatchDto>>(
             $"api/competitions/by-external/{Uri.EscapeDataString(leagueId)}/schedule/{Uri.EscapeDataString(season)}", ct);
         return list ?? new List<MatchDto>();
+    }
+
+    public async Task<List<SeasonDetailDto>> GetSeasonDetailsAsync(string leagueId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(leagueId)) return new List<SeasonDetailDto>();
+        var list = await _http.GetFromJsonAsync<List<SeasonDetailDto>>(
+            $"api/competitions/by-external/{Uri.EscapeDataString(leagueId)}/seasons", ApiJson.Options, ct);
+        return list ?? new List<SeasonDetailDto>();
+    }
+
+    public async Task<List<LookupTableRowDto>> GetLookupTableAsync(string leagueId, string season, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(leagueId) || string.IsNullOrWhiteSpace(season)) return new List<LookupTableRowDto>();
+        var list = await _http.GetFromJsonAsync<List<LookupTableRowDto>>(
+            $"api/competitions/by-external/{Uri.EscapeDataString(leagueId)}/table/{Uri.EscapeDataString(season)}", ApiJson.Options, ct);
+        return list ?? new List<LookupTableRowDto>();
+    }
+
+    /// <summary>League analysis (seasons, points/goals trends, table). Champions come from GetChampionsAsync.</summary>
+    public async Task<LeagueAnalysisDto?> GetLeagueAnalysisAsync(string leagueId, int? lastN = null, bool filterTitlesByLeagueTeams = true, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(leagueId)) return null;
+        var parts = new List<string>();
+        if (lastN.HasValue) parts.Add($"lastN={lastN.Value}");
+        if (filterTitlesByLeagueTeams) parts.Add("filterTitlesByLeagueTeams=true");
+        var qs = parts.Count > 0 ? "?" + string.Join("&", parts) : "";
+        return await _http.GetFromJsonAsync<LeagueAnalysisDto>(
+            $"api/competitions/by-external/{Uri.EscapeDataString(leagueId)}/analysis{qs}", ApiJson.Options, ct);
+    }
+
+    /// <summary>Past champions for a league from honours API (LeagueHonourMap → HonourWinners). Use for Champion Timeline and titles-by-club.</summary>
+    public async Task<List<ChampionTimelineItemDto>> GetChampionsAsync(string leagueId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(leagueId)) return new List<ChampionTimelineItemDto>();
+        var list = await _http.GetFromJsonAsync<List<ChampionTimelineItemDto>>(
+            $"api/competitions/by-external/{Uri.EscapeDataString(leagueId)}/champions", ApiJson.Options, ct);
+        return list ?? new List<ChampionTimelineItemDto>();
     }
 
     // GET player by id (DB int or external string) with Single URL
@@ -206,6 +268,21 @@ public class SoccerApiClient
         resp.EnsureSuccessStatusCode();
         return await resp.Content.ReadFromJsonAsync<PlayerDetailDto>(ct);
     }
+
+    public async Task<List<PlayerContractDto>> GetPlayerContractsAsync(string playerId, CancellationToken ct = default)
+        => await _http.GetFromJsonAsync<List<PlayerContractDto>>($"api/players/{Uri.EscapeDataString(playerId)}/contracts", ct) ?? new();
+
+    public async Task<List<PlayerFormerTeamDto>> GetPlayerFormerTeamsAsync(string playerId, CancellationToken ct = default)
+        => await _http.GetFromJsonAsync<List<PlayerFormerTeamDto>>($"api/players/{Uri.EscapeDataString(playerId)}/former-teams", ct) ?? new();
+
+    public async Task<List<PlayerHonourDto>> GetPlayerHonoursAsync(string playerId, CancellationToken ct = default)
+        => await _http.GetFromJsonAsync<List<PlayerHonourDto>>($"api/players/{Uri.EscapeDataString(playerId)}/honours", ct) ?? new();
+
+    public async Task<List<PlayerMilestoneDto>> GetPlayerMilestonesAsync(string playerId, CancellationToken ct = default)
+        => await _http.GetFromJsonAsync<List<PlayerMilestoneDto>>($"api/players/{Uri.EscapeDataString(playerId)}/milestones", ct) ?? new();
+
+    public async Task<List<PlayerResultDto>> GetPlayerResultsAsync(string playerId, CancellationToken ct = default)
+        => await _http.GetFromJsonAsync<List<PlayerResultDto>>($"api/players/{Uri.EscapeDataString(playerId)}/results", ct) ?? new();
 
     // GET team by id (DB int or external string). Single URL
     public async Task<TeamDetailDto?> GetTeamAsync(string id, CancellationToken ct = default)
@@ -230,6 +307,22 @@ public class SoccerApiClient
             return null;
         resp.EnsureSuccessStatusCode();
         return await resp.Content.ReadFromJsonAsync<VenueDetailDto>(ct);
+    }
+
+    public async Task<List<VenueEventDto>> GetVenueUpcomingAsync(string venueId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(venueId)) return new();
+        using var resp = await _http.GetAsync($"api/venues/{Uri.EscapeDataString(venueId)}/upcoming", ct);
+        if (!resp.IsSuccessStatusCode) return new();
+        return await resp.Content.ReadFromJsonAsync<List<VenueEventDto>>(ct) ?? new();
+    }
+
+    public async Task<List<VenueEventDto>> GetVenueRecentAsync(string venueId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(venueId)) return new();
+        using var resp = await _http.GetAsync($"api/venues/{Uri.EscapeDataString(venueId)}/recent", ct);
+        if (!resp.IsSuccessStatusCode) return new();
+        return await resp.Content.ReadFromJsonAsync<List<VenueEventDto>>(ct) ?? new();
     }
 
     public async Task<List<MatchDto>> SearchMatchesAsync(
@@ -259,5 +352,15 @@ public class SoccerApiClient
     {
         var url = $"/api/matches/external?sportsDbTeamId={Uri.EscapeDataString(sportsDbTeamId)}&from={from:yyyy-MM-dd}&to={to:yyyy-MM-dd}";
         return await _http.GetFromJsonAsync<List<MatchDto>>(url, ct) ?? new();
+    }
+
+    /// <summary>Get full match detail by TheSportsDB idEvent (event + lineup + timeline + stats + highlights + tv).</summary>
+    public async Task<MatchDetailResponseDto?> GetMatchDetailAsync(string idEvent, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(idEvent)) return null;
+        using var resp = await _http.GetAsync($"api/Matches/event/{Uri.EscapeDataString(idEvent)}", ct);
+        if (resp.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+        resp.EnsureSuccessStatusCode();
+        return await resp.Content.ReadFromJsonAsync<MatchDetailResponseDto>(ct);
     }
 }
