@@ -3,7 +3,7 @@ namespace SoccerBlast.Shared.Contracts;
 public class MatchDto
 {
     public int Id { get; set; }
-    public DateTime UtcDate { get; set; }
+    public DateTimeOffset UtcDate { get; set; }
 
     public int CompetitionId { get; set; }
     public string CompetitionName { get; set; } = "";
@@ -21,4 +21,7 @@ public class MatchDto
     public int? HomeScore { get; set; }
     public int? AwayScore { get; set; }
     public string Status { get; set; } = "";
+
+    /// <summary>TheSportsDB idEvent when available; used for link to /match/{ExternalId}.</summary>
+    public string? ExternalId { get; set; }
 }

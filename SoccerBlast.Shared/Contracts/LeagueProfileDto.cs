@@ -2,6 +2,9 @@ namespace SoccerBlast.Shared.Contracts;
 
 public class LeagueProfileDto
 {
+    /// <summary>Alternate name (strLeagueAlternate).</summary>
+    public string? LeagueAlternate { get; set; }
+
     public string? Sport { get; set; }
     public string? Gender { get; set; }
     public int? FormedYear { get; set; }
@@ -16,6 +19,7 @@ public class LeagueProfileDto
     public string? BannerUrl { get; set; }
     public string? PosterUrl { get; set; }
     public string? TrophyUrl { get; set; }
+    public string? LogoUrl { get; set; }
     public List<string>? FanartUrls { get; set; }
 
     public string? TvRights { get; set; }
@@ -25,5 +29,6 @@ public class LeagueProfileDto
     public string? Twitter { get; set; }
     public string? Instagram { get; set; }
     public string? Youtube { get; set; }
+    public string? Rss { get; set; }
 }
 

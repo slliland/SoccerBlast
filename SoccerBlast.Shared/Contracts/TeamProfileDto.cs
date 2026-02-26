@@ -1,7 +1,7 @@
 namespace SoccerBlast.Shared.Contracts;
 
-/// <summary>League name plus optional badge URL from API (Competition.BadgeUrl).</summary>
-public record LeagueEntryDto(string Name, string? BadgeUrl);
+/// <summary>League name plus optional badge URL and optional competition id for linking to /competition/{Id}.</summary>
+public record LeagueEntryDto(string Name, string? BadgeUrl, int? Id = null);
 
 public class TeamProfileDto
 {

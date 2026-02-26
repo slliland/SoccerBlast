@@ -18,5 +18,8 @@ public class CompetitionDetailDto
 
     /// <summary>Optional list of seasons from TheSportsDB v2 list/seasons/{idLeague}.</summary>
     public List<string>? Seasons { get; set; }
+
+    /// <summary>TheSportsDB league id (e.g. 4328). Use for seasons/table/schedule API when present.</summary>
+    public string? ExternalId { get; set; }
 }
 
