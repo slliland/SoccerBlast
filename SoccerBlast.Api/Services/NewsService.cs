@@ -1,5 +1,6 @@
 using System.Xml.Linq;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using SoccerBlast.Shared.Contracts;
 using System.Text.RegularExpressions;
 using SoccerBlast.Api.Data;
@@ -10,11 +11,30 @@ using System.Text;
 
 namespace SoccerBlast.Api.Services;
 
+/// <summary>Precomputed team fields for cheap contains-check in news tagging (avoids repeated ToLower/Replace per article).</summary>
+internal sealed record TeamMatchKey(int Id, string NameLower, string CoreLower);
+
 public class NewsService
 {
+    private static readonly SemaphoreSlim _newsRefreshLock = new(1, 1);
+
     private readonly HttpClient _http;
     private readonly IMemoryCache _cache;
     private readonly AppDbContext _db;
+    private readonly ILogger<NewsService> _logger;
+
+    private static string CoreLowerFromName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "";
+        var lower = name.Trim().ToLowerInvariant();
+        return lower
+            .Replace(" fc", "")
+            .Replace(" afc", "")
+            .Replace(" united", "")
+            .Replace(" city", "")
+            .Replace(" town", "")
+            .Trim();
+    }
 
     // Pick a few reliable football feeds (you can add/remove anytime)
     // Tip: keep it small (3–6 feeds) to avoid slowness.
@@ -27,11 +47,12 @@ public class NewsService
         ("UEFA - News", "https://www.uefa.com/rssfeed/news/")
     ];
 
-    public NewsService(HttpClient http, IMemoryCache cache, AppDbContext db)
+    public NewsService(HttpClient http, IMemoryCache cache, AppDbContext db, ILogger<NewsService> logger)
     {
         _http = http;
         _cache = cache;
         _db = db;
+        _logger = logger;
     }
 
     public async Task ClearCacheAndRefreshAsync()
@@ -50,24 +71,32 @@ public class NewsService
     {
         limit = Math.Clamp(limit, 1, 50);
 
-        // Cache the aggregated result for a short time
+        // Cache the aggregated result for a short time; only one refresh (fetch + upsert) at a time
         return await _cache.GetOrCreateAsync($"news:recent:{limit}", async entry =>
         {
             entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
 
-            var tasks = Feeds.Select(f => FetchFeedAsync(f.Source, f.Url)).ToArray();
-            var results = await Task.WhenAll(tasks);
+            await _newsRefreshLock.WaitAsync();
+            try
+            {
+                var tasks = Feeds.Select(f => FetchFeedAsync(f.Source, f.Url)).ToArray();
+                var results = await Task.WhenAll(tasks);
 
-            // Flatten + dedupe by Url + sort newest first
-            var all = results.SelectMany(x => x)
-                .Where(x => !string.IsNullOrWhiteSpace(x.Url))
-                .GroupBy(x => x.Url)
-                .Select(g => g.First())
-                .OrderByDescending(x => x.PublishedAt ?? DateTimeOffset.MinValue)
-                .Take(limit)
-                .ToList();
-            await UpsertNewsAsync(all);
-            return all;
+                // Flatten + dedupe by Url + sort newest first
+                var all = results.SelectMany(x => x)
+                    .Where(x => !string.IsNullOrWhiteSpace(x.Url))
+                    .GroupBy(x => x.Url)
+                    .Select(g => g.First())
+                    .OrderByDescending(x => x.PublishedAt ?? DateTimeOffset.MinValue)
+                    .Take(limit)
+                    .ToList();
+                await UpsertNewsAsync(all);
+                return all;
+            }
+            finally
+            {
+                _newsRefreshLock.Release();
+            }
         }) ?? new List<NewsDto>();
     }
 
@@ -93,9 +122,7 @@ public class NewsService
             Title = n.Title,
             Url = n.Url,
             Source = n.Source,
-            PublishedAt = n.PublishedAtUtc.HasValue
-                ? new DateTimeOffset(DateTime.SpecifyKind(n.PublishedAtUtc.Value, DateTimeKind.Utc))
-                : null,
+            PublishedAt = n.PublishedAtUtc,
             ThumbnailUrl = n.ThumbnailUrl,
             Content = n.Content
         }).ToList();
@@ -137,10 +164,10 @@ public class NewsService
                     var title = item.Elements().FirstOrDefault(x => x.Name.LocalName == "title")?.Value?.Trim() ?? "";
                     var link = item.Elements().FirstOrDefault(x => x.Name.LocalName == "link")?.Value?.Trim() ?? "";
 
-                    var pub = TryParseDate(
+                    var pub = NormalizePublishedUtc(TryParseDate(
                         item.Elements().FirstOrDefault(x => x.Name.LocalName == "pubDate")?.Value
                         ?? item.Elements().FirstOrDefault(x => x.Name.LocalName == "date")?.Value
-                    );
+                    ));
 
                     // Try to get content (description or encoded content)
                     var content =
@@ -180,10 +207,10 @@ public class NewsService
                     var title = entry.Elements().FirstOrDefault(x => x.Name.LocalName == "title")?.Value?.Trim() ?? "";
                     var link = entry.Elements().FirstOrDefault(x => x.Name.LocalName == "link")?.Attribute("href")?.Value?.Trim() ?? "";
 
-                    var pub = TryParseDate(
+                    var pub = NormalizePublishedUtc(TryParseDate(
                         entry.Elements().FirstOrDefault(x => x.Name.LocalName == "updated")?.Value
                         ?? entry.Elements().FirstOrDefault(x => x.Name.LocalName == "published")?.Value
-                    );
+                    ));
 
                     // Try to get content (content or summary)
                     var content =
@@ -307,6 +334,17 @@ public class NewsService
         }
     }
 
+    private static DateTime AsUtc(DateTime dt)
+    {
+        return dt.Kind switch
+        {
+            DateTimeKind.Utc => dt,
+            DateTimeKind.Local => dt.ToUniversalTime(),
+            DateTimeKind.Unspecified => DateTime.SpecifyKind(dt, DateTimeKind.Utc),
+            _ => dt
+        };
+    }
+
     private static DateTimeOffset? TryParseDate(string? s)
     {
         if (string.IsNullOrWhiteSpace(s)) return null;
@@ -314,67 +352,159 @@ public class NewsService
         return null;
     }
 
+    /// <summary>Normalize to UTC for PostgreSQL timestamptz; RSS/Atom often return Unspecified or Local.</summary>
+    private static DateTimeOffset? NormalizePublishedUtc(DateTimeOffset? dto)
+    {
+        if (!dto.HasValue) return null;
+        return new DateTimeOffset(AsUtc(dto.Value.UtcDateTime), TimeSpan.Zero);
+    }
+
     private async Task UpsertNewsAsync(List<NewsDto> items)
     {
-        if (items.Count == 0) return;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        _logger.LogInformation("UpsertNewsAsync started, items={Count}", items.Count);
 
-        // Normalize + hash urls
+        if (items.Count == 0)
+        {
+            _logger.LogDebug("UpsertNewsAsync: no items, skipping");
+            return;
+        }
+
         string Norm(string url) => url.Trim();
         string Hash(string url)
         {
             using var sha = SHA256.Create();
             var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(Norm(url)));
-            return Convert.ToHexString(bytes); // e.g. "A1B2..."
+            return Convert.ToHexString(bytes);
         }
 
-        var hashes = items.Select(n => Hash(n.Url)).Distinct().ToList();
+        // Precompute hashes once
+        var itemWithHash = items
+            .Where(x => !string.IsNullOrWhiteSpace(x.Url))
+            .Select(x => new { Dto = x, Hash = Hash(x.Url) })
+            .ToList();
 
-        var existing = await _db.NewsItems
-            .Where(x => hashes.Contains(x.UrlHash))
-            .ToDictionaryAsync(x => x.UrlHash);
-
-        foreach (var dto in items)
+        if (itemWithHash.Count == 0)
         {
-            if (string.IsNullOrWhiteSpace(dto.Url)) continue;
-            var h = Hash(dto.Url);
-            if (existing.TryGetValue(h, out var row))
-            {
-                // update
-                row.Title = dto.Title ?? "";
-                row.Source = dto.Source ?? "";
-                row.Url = dto.Url ?? "";
-                row.ThumbnailUrl = dto.ThumbnailUrl;
-                row.Content = dto.Content;
-                row.PublishedAtUtc = dto.PublishedAt?.UtcDateTime;
-            }
-            else
-            {
-                _db.NewsItems.Add(new NewsItem
-                {
-                    Title = dto.Title ?? "",
-                    Source = dto.Source ?? "",
-                    Url = dto.Url ?? "",
-                    ThumbnailUrl = dto.ThumbnailUrl,
-                    Content = dto.Content,
-                    PublishedAtUtc = dto.PublishedAt?.UtcDateTime,
-                    UrlHash = h
-                });
-            }
+            _logger.LogWarning("UpsertNewsAsync: no items with valid Url after hash, skipping");
+            return;
         }
 
-        await _db.SaveChangesAsync();
-        await UpsertNewsTeamsAsync(items);
+        _logger.LogDebug("UpsertNewsAsync: itemWithHash={Count}, distinct hashes={Distinct}",
+            itemWithHash.Count, itemWithHash.Select(x => x.Hash).Distinct().Count());
+
+        // 1) Load existing rows in chunks (avoid huge ANY/IN payload)
+        var existing = new Dictionary<string, NewsItem>(StringComparer.Ordinal);
+        const int lookupChunkSize = 100;
+        int lookupChunks = 0;
+
+        foreach (var hashChunk in itemWithHash.Select(x => x.Hash).Distinct().Chunk(lookupChunkSize))
+        {
+            var chunk = hashChunk.ToList();
+            var rows = await _db.NewsItems
+                .Where(x => chunk.Contains(x.UrlHash))
+                .ToListAsync();
+            foreach (var row in rows)
+                existing[row.UrlHash] = row;
+            lookupChunks++;
+        }
+
+        _logger.LogDebug("UpsertNewsAsync: loaded existing rows={Existing}, lookupChunks={Chunks}", existing.Count, lookupChunks);
+
+        // 2) Upsert in smaller batches (avoid giant SaveChanges batch on Supabase); track inserted for tagging
+        const int saveChunkSize = 25;
+        int inserted = 0, updated = 0, saveRounds = 0;
+        var insertedDtos = new List<NewsDto>();
+
+        try
+        {
+            for (int i = 0; i < itemWithHash.Count; i += saveChunkSize)
+            {
+                var chunk = itemWithHash.Skip(i).Take(saveChunkSize).ToList();
+
+                foreach (var x in chunk)
+                {
+                    var dto = x.Dto;
+                    var h = x.Hash;
+
+                    if (existing.TryGetValue(h, out var row))
+                    {
+                        row.Title = dto.Title ?? "";
+                        row.Source = dto.Source ?? "";
+                        row.Url = dto.Url ?? "";
+                        row.ThumbnailUrl = dto.ThumbnailUrl;
+                        row.Content = dto.Content;
+                        row.PublishedAtUtc = dto.PublishedAt.HasValue ? new DateTimeOffset(AsUtc(dto.PublishedAt.Value.UtcDateTime), TimeSpan.Zero) : null;
+                        updated++;
+                    }
+                    else
+                    {
+                        var newRow = new NewsItem
+                        {
+                            Title = dto.Title ?? "",
+                            Source = dto.Source ?? "",
+                            Url = dto.Url ?? "",
+                            ThumbnailUrl = dto.ThumbnailUrl,
+                            Content = dto.Content,
+                            PublishedAtUtc = dto.PublishedAt.HasValue ? new DateTimeOffset(AsUtc(dto.PublishedAt.Value.UtcDateTime), TimeSpan.Zero) : null,
+                            UrlHash = h
+                        };
+
+                        _db.NewsItems.Add(newRow);
+                        existing[h] = newRow;
+                        inserted++;
+                        insertedDtos.Add(dto);
+                    }
+                }
+
+                await _db.SaveChangesAsync();
+                _db.ChangeTracker.Clear();
+                saveRounds++;
+            }
+
+            _logger.LogInformation("UpsertNewsAsync completed: inserted={Inserted}, updated={Updated}, saveRounds={Rounds}, elapsedMs={Elapsed}",
+                inserted, updated, saveRounds, sw.ElapsedMilliseconds);
+
+            // Only run team-tagging for newly inserted articles (much cheaper when nothing new)
+            if (insertedDtos.Count > 0)
+                await UpsertNewsTeamsAsync(insertedDtos);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "UpsertNewsAsync failed: items={Count}, inserted={Inserted}, updated={Updated}, saveRounds={Rounds}, elapsedMs={Elapsed}",
+                items.Count, inserted, updated, saveRounds, sw.ElapsedMilliseconds);
+            throw;
+        }
     }
 
     private async Task UpsertNewsTeamsAsync(List<NewsDto> items)
     {
-        // Load teams once
-        var teams = await _db.Teams
-            .AsNoTracking()
-            .Select(t => new { t.Id, t.Name })
-            .ToListAsync();
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        _logger.LogInformation("UpsertNewsTeamsAsync started, items={Count}", items.Count);
 
-        if (teams.Count == 0) return;
+        // Load teams once (cached 24h – teams rarely change; precomputed NameLower/CoreLower for cheap contains)
+        _logger.LogInformation("UpsertNewsTeamsAsync: loading teams (cache or DB)...");
+        var teams = await _cache.GetOrCreateAsync("news:teams", async entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(24);
+            _logger.LogInformation("UpsertNewsTeamsAsync: cache miss, querying Teams from DB...");
+            var rows = await _db.Teams
+                .AsNoTracking()
+                .Select(t => new { t.Id, t.Name })
+                .ToListAsync();
+            var list = rows
+                .Select(t => new TeamMatchKey(t.Id, t.Name.Trim().ToLowerInvariant(), CoreLowerFromName(t.Name)))
+                .ToList();
+            _logger.LogInformation("UpsertNewsTeamsAsync: Teams query returned {Count} rows (precomputed matcher)", list.Count);
+            return list;
+        });
+
+        if (teams == null || teams.Count == 0)
+        {
+            _logger.LogWarning("UpsertNewsTeamsAsync finished: no teams in DB or cache, skipping");
+            return;
+        }
+        _logger.LogInformation("UpsertNewsTeamsAsync: teams loaded={Count}, elapsedMs={Elapsed}", teams.Count, sw.ElapsedMilliseconds);
 
         // Find the NewsItem rows you just upserted (by UrlHash)
         string Norm(string url) => url.Trim();
@@ -387,66 +517,98 @@ public class NewsService
 
         var hashes = items.Select(x => Hash(x.Url)).Distinct().ToList();
 
-        var newsRows = await _db.NewsItems
-            .Where(n => hashes.Contains(n.UrlHash))
-            .ToListAsync();
+        var newsRows = new List<NewsItem>();
+        const int hashChunkSize = 100;
 
-        // Build desired mappings
+        foreach (var hashChunk in hashes.Chunk(hashChunkSize))
+        {
+            var chunk = hashChunk.ToList();
+            var part = await _db.NewsItems
+                .Where(n => chunk.Contains(n.UrlHash))
+                .ToListAsync();
+
+            newsRows.AddRange(part);
+        }
+
+        _logger.LogInformation("UpsertNewsTeamsAsync: newsRows found={Count} for hashes={HashCount}, elapsedMs={Elapsed}", newsRows.Count, hashes.Count, sw.ElapsedMilliseconds);
+
+        // Build desired mappings (precomputed NameLower/CoreLower – no per-article ToLower/Replace)
         var desired = new List<NewsItemTeam>();
 
         foreach (var n in newsRows)
         {
             if (string.IsNullOrWhiteSpace(n.Title)) continue;
 
-            // Check both title and full text for team mentions
-            var searchText = $"{n.Title} {n.Source}".ToLower();
+            var searchText = $"{n.Title} {n.Source}".ToLowerInvariant();
 
             foreach (var t in teams)
             {
-                var teamName = t.Name.ToLower();
-                
-                // Check for exact match or common variations
-                if (searchText.Contains(teamName, StringComparison.OrdinalIgnoreCase))
+                if (searchText.Contains(t.NameLower))
                 {
                     desired.Add(new NewsItemTeam { NewsItemId = n.Id, TeamId = t.Id });
                     continue;
                 }
-
-                // Also check without common suffixes (e.g., "Arsenal" matches "Arsenal FC")
-                var coreName = teamName
-                    .Replace(" fc", "")
-                    .Replace(" afc", "")
-                    .Replace(" united", "")
-                    .Replace(" city", "")
-                    .Replace(" town", "")
-                    .Trim();
-
-                if (coreName.Length >= 4 && searchText.Contains(coreName))
-                {
+                if (t.CoreLower.Length >= 4 && searchText.Contains(t.CoreLower))
                     desired.Add(new NewsItemTeam { NewsItemId = n.Id, TeamId = t.Id });
-                }
             }
         }
 
-        if (desired.Count == 0) return;
+        if (desired.Count == 0)
+        {
+            _logger.LogInformation("UpsertNewsTeamsAsync finished: no desired team-news pairs (newsRows={NewsRows}), elapsedMs={Elapsed}", newsRows.Count, sw.ElapsedMilliseconds);
+            return;
+        }
 
         // Insert only new pairs (don’t spam duplicates)
         var newsIds = desired.Select(x => x.NewsItemId).Distinct().ToList();
 
-        var existingPairs = await _db.Set<NewsItemTeam>()
-            .Where(x => newsIds.Contains(x.NewsItemId))
-            .Select(x => new { x.NewsItemId, x.TeamId })
-            .ToListAsync();
+        var existingPairs = new List<(int NewsItemId, int TeamId)>();
+        const int newsIdChunkSize = 200;
+
+        foreach (var idChunk in newsIds.Chunk(newsIdChunkSize))
+        {
+            var chunk = idChunk.ToList();
+
+            var part = await _db.Set<NewsItemTeam>()
+                .Where(x => chunk.Contains(x.NewsItemId))
+                .Select(x => new { x.NewsItemId, x.TeamId })
+                .ToListAsync();
+
+            existingPairs.AddRange(part.Select(p => (p.NewsItemId, p.TeamId)));
+        }
 
         var exists = existingPairs.ToHashSet();
 
         var toAdd = desired
-            .Where(x => !exists.Contains(new { x.NewsItemId, x.TeamId }))
+            .Where(x => !exists.Contains((x.NewsItemId, x.TeamId)))
             .ToList();
 
-        if (toAdd.Count == 0) return;
+        if (toAdd.Count == 0)
+        {
+            _logger.LogInformation("UpsertNewsTeamsAsync finished: no new pairs to add (desired={Desired}, existingPairs={Existing}), elapsedMs={Elapsed}", desired.Count, existingPairs.Count, sw.ElapsedMilliseconds);
+            return;
+        }
 
-        _db.Set<NewsItemTeam>().AddRange(toAdd);
-        await _db.SaveChangesAsync();
+        const int insertChunkSize = 100;
+        int insertRounds = 0;
+        try
+        {
+            for (int i = 0; i < toAdd.Count; i += insertChunkSize)
+            {
+                var chunk = toAdd.Skip(i).Take(insertChunkSize).ToList();
+                _db.Set<NewsItemTeam>().AddRange(chunk);
+                await _db.SaveChangesAsync();
+                _db.ChangeTracker.Clear();
+                insertRounds++;
+            }
+            _logger.LogInformation("UpsertNewsTeamsAsync completed: desired={Desired}, existingPairs={Existing}, toAdd={ToAdd}, insertRounds={Rounds}, elapsedMs={Elapsed}",
+                desired.Count, existingPairs.Count, toAdd.Count, insertRounds, sw.ElapsedMilliseconds);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "UpsertNewsTeamsAsync failed: toAdd={ToAdd}, insertRounds={Rounds}, elapsedMs={Elapsed}",
+                toAdd.Count, insertRounds, sw.ElapsedMilliseconds);
+            throw;
+        }
     }
 }

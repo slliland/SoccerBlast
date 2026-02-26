@@ -154,11 +154,12 @@ public class CompetitionsController : ControllerBase
                 Id = comp.Id,
                 Name = comp.Name,
                 Country = comp.Country,
-            BadgeUrl = badgeUrl,
-            MatchCount = matchCount,
-            Profile = profile,
-            Teams = teams,
-            Seasons = seasons
+                BadgeUrl = badgeUrl,
+                MatchCount = matchCount,
+                Profile = profile,
+                Teams = teams,
+                Seasons = seasons,
+                ExternalId = leagueId // so frontend uses SportsDB id for table/schedule, not internal id (l=5 returns empty)
             };
 
             return dto;
@@ -195,6 +196,7 @@ public class CompetitionsController : ControllerBase
                 badgeUrl = string.IsNullOrWhiteSpace(league.StrBadge) ? null : league.StrBadge.Trim();
                 profile = new LeagueProfileDto
                 {
+                    LeagueAlternate = league.StrLeagueAlternate,
                     Sport = league.StrSport,
                     Gender = league.StrGender,
                     FormedYear = TryParseInt(league.IntFormedYear),
@@ -206,6 +208,7 @@ public class CompetitionsController : ControllerBase
                     BannerUrl = league.StrBanner,
                     PosterUrl = league.StrPoster,
                     TrophyUrl = league.StrTrophy,
+                    LogoUrl = league.StrLogo,
                     FanartUrls = new[] { league.StrFanart1, league.StrFanart2, league.StrFanart3, league.StrFanart4 }
                         .Where(s => !string.IsNullOrWhiteSpace(s))
                         .Select(s => s!.Trim())
@@ -215,7 +218,8 @@ public class CompetitionsController : ControllerBase
                     Facebook = CleanUrl(league.StrFacebook),
                     Twitter = CleanUrl(league.StrTwitter),
                     Instagram = CleanUrl(league.StrInstagram),
-                    Youtube = CleanUrl(league.StrYoutube)
+                    Youtube = CleanUrl(league.StrYoutube),
+                    Rss = CleanUrl(league.StrRSS)
                 };
             }
 
@@ -248,8 +252,237 @@ public class CompetitionsController : ControllerBase
             MatchCount = 0,
             Profile = profile,
             Teams = teams,
-            Seasons = seasons
+            Seasons = seasons,
+            ExternalId = leagueId
         };
+    }
+
+    /// <summary>v2: GET list/seasons/{sportsDbId}. Returns season list with strSeason, strBadge, strPoster, strDescriptionEN when present.</summary>
+    [HttpGet("by-external/{sportsDbId}/seasons")]
+    public async Task<ActionResult<List<SeasonDetailDto>>> GetSeasonDetailsByExternalId(string sportsDbId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(sportsDbId)) return new List<SeasonDetailDto>();
+        var list = await _sportsDb.ListSeasonDetailsAsync(sportsDbId.Trim(), HttpContext.RequestAborted);
+        return list;
+    }
+
+    /// <summary>Standings for league+season. Served from DB if populated by ScrapeLeagueTables script; otherwise from TheSportsDB v1 lookuptable.</summary>
+    [HttpGet("by-external/{sportsDbId}/table/{season}")]
+    public async Task<ActionResult<List<LookupTableRowDto>>> GetTableByExternalId(string sportsDbId, string season, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(sportsDbId) || string.IsNullOrWhiteSpace(season)) return new List<LookupTableRowDto>();
+        var lid = sportsDbId.Trim();
+        var s = season.Trim();
+
+        var fromDb = await _db.LeagueSeasonStandings
+            .AsNoTracking()
+            .Where(x => x.LeagueId == lid && x.Season == s)
+            .OrderBy(x => x.Rank)
+            .Select(x => new LookupTableRowDto
+            {
+                Rank = x.Rank,
+                TeamName = x.TeamName,
+                TeamBadgeUrl = x.TeamBadgeUrl,
+                Played = x.Played,
+                Win = x.Win,
+                Draw = x.Draw,
+                Loss = x.Loss,
+                GoalsFor = x.GoalsFor,
+                GoalsAgainst = x.GoalsAgainst,
+                GoalDifference = x.GoalDifference,
+                Points = x.Points,
+                Form = x.Form
+            })
+            .ToListAsync(ct);
+
+        if (fromDb.Count > 0)
+            return fromDb;
+
+        // No rows in LeagueSeasonStandings (run ScrapeLeagueTables with default DB); v1 returns truncated rows
+        var rows = await _sportsDb.GetLookupTableAsync(lid, s, ct);
+        return rows;
+    }
+
+    /// <summary>League analysis derived from LeagueSeasonStandings: champions, titles, top-4, points/goals trends.</summary>
+    /// <param name="filterTitlesByLeagueTeams">When true, TitlesByClub and Top4ByClub only include teams that are in this league (strLeague == league id from SportsDB).</param>
+    [HttpGet("by-external/{sportsDbId}/analysis")]
+    public async Task<ActionResult<LeagueAnalysisDto>> GetAnalysisByExternalId(string sportsDbId, [FromQuery] int? lastN, [FromQuery] bool filterTitlesByLeagueTeams = false, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(sportsDbId)) return NotFound();
+        var lid = sportsDbId.Trim();
+
+        var all = await _db.LeagueSeasonStandings
+            .AsNoTracking()
+            .Where(x => x.LeagueId == lid)
+            .OrderBy(x => x.Season)
+            .ThenBy(x => x.Rank)
+            .Select(x => new { x.Season, x.Rank, x.TeamId, x.TeamName, x.TeamBadgeUrl, x.Points, x.GoalsFor })
+            .ToListAsync(ct);
+
+        if (all.Count == 0)
+            return new LeagueAnalysisDto();
+
+        HashSet<string>? leagueTeamIds = null;
+        if (filterTitlesByLeagueTeams)
+        {
+            try
+            {
+                var leagueTeams = await _sportsDb.LookupAllTeamsInLeagueAsync(lid, ct);
+                if (leagueTeams != null && leagueTeams.Count > 0)
+                    leagueTeamIds = leagueTeams.Where(t => !string.IsNullOrWhiteSpace(t.IdTeam)).Select(t => t.IdTeam!.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            }
+            catch { /* fall back to unfiltered */ }
+        }
+
+        var seasonsOrdered = all.Select(x => x.Season).Distinct().OrderBy(x => x).ToList();
+        if (lastN.HasValue && lastN.Value > 0)
+        {
+            seasonsOrdered = seasonsOrdered.TakeLast(lastN.Value).ToList();
+            var set = seasonsOrdered.ToHashSet();
+            all = all.Where(x => set.Contains(x.Season)).ToList();
+        }
+
+        // Helper: pick most recent non-empty name and badge from a group (by Season desc)
+        static (string name, string? badge) PickDisplayNameAndBadge(IEnumerable<(string Season, string TeamId, string TeamName, string? TeamBadgeUrl)> rows)
+        {
+            var ordered = rows.OrderByDescending(x => x.Season).ToList();
+            var name = ordered.Select(x => x.TeamName).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n)) ?? "";
+            var badge = ordered.Select(x => x.TeamBadgeUrl).FirstOrDefault(b => !string.IsNullOrWhiteSpace(b));
+            return (name, badge);
+        }
+
+        // Champion timeline (rank 1 per season): one row per season, dedupe by (Season, TeamId) so same team with different name/badge merges
+        var championTimeline = all
+            .Where(x => x.Rank == 1)
+            .GroupBy(x => new { x.Season, x.TeamId })
+            .Select(g =>
+            {
+                var pick = PickDisplayNameAndBadge(g.Select(x => (x.Season, x.TeamId, x.TeamName, x.TeamBadgeUrl)));
+                return new ChampionTimelineItemDto
+                {
+                    Season = g.Key.Season,
+                    TeamId = g.Key.TeamId,
+                    TeamName = pick.name,
+                    TeamBadgeUrl = pick.badge
+                };
+            })
+            .OrderBy(x => x.Season)
+            .ToList();
+
+        // Titles by club: group by TeamId only, then pick display name/badge (most recent)
+        var titlesByClubRaw = all
+            .Where(x => x.Rank == 1)
+            .GroupBy(x => x.TeamId, StringComparer.OrdinalIgnoreCase)
+            .Select(g =>
+            {
+                var pick = PickDisplayNameAndBadge(g.Select(x => (x.Season, x.TeamId, x.TeamName, x.TeamBadgeUrl)));
+                return new TitlesByClubDto
+                {
+                    TeamId = g.Key,
+                    TeamName = pick.name,
+                    TeamBadgeUrl = pick.badge,
+                    Titles = g.Count()
+                };
+            })
+            .OrderByDescending(x => x.Titles);
+        var titlesByClub = (leagueTeamIds != null
+            ? titlesByClubRaw.Where(t => leagueTeamIds.Contains(t.TeamId))
+            : titlesByClubRaw).ToList();
+
+        // Top 4 by club: group by TeamId only
+        var top4ByClubRaw = all
+            .Where(x => x.Rank <= 4)
+            .GroupBy(x => x.TeamId, StringComparer.OrdinalIgnoreCase)
+            .Select(g =>
+            {
+                var pick = PickDisplayNameAndBadge(g.Select(x => (x.Season, x.TeamId, x.TeamName, x.TeamBadgeUrl)));
+                return new TopNByClubDto
+                {
+                    TeamId = g.Key,
+                    TeamName = pick.name,
+                    TeamBadgeUrl = pick.badge,
+                    Top4Count = g.Count()
+                };
+            })
+            .OrderByDescending(x => x.Top4Count);
+        var top4ByClub = (leagueTeamIds != null
+            ? top4ByClubRaw.Where(t => leagueTeamIds.Contains(t.TeamId))
+            : top4ByClubRaw).ToList();
+
+        // Points by club by season: group by TeamId only; one (Season, Points) per season per team (dedupe by Season within team)
+        var pointsByClub = all
+            .GroupBy(x => x.TeamId, StringComparer.OrdinalIgnoreCase)
+            .Select(g =>
+            {
+                var pick = PickDisplayNameAndBadge(g.Select(x => (x.Season, x.TeamId, x.TeamName, x.TeamBadgeUrl)));
+                var seasonPoints = g
+                    .GroupBy(x => x.Season, StringComparer.OrdinalIgnoreCase)
+                    .Select(sg => new SeasonPointsDto { Season = sg.Key, Points = sg.Max(x => x.Points) })
+                    .OrderBy(x => x.Season)
+                    .ToList();
+                return new PointsByClubSeasonDto
+                {
+                    TeamId = g.Key,
+                    TeamName = pick.name,
+                    TeamBadgeUrl = pick.badge,
+                    SeasonPoints = seasonPoints
+                };
+            })
+            .Where(x => x.SeasonPoints.Count > 0)
+            .ToList();
+
+        // League goals by season (sum of GoalsFor = total league goals; team count)
+        var leagueGoalsBySeason = all
+            .GroupBy(x => x.Season)
+            .Select(g => new LeagueGoalsBySeasonDto
+            {
+                Season = g.Key,
+                TotalGoals = g.Sum(x => x.GoalsFor),
+                TeamCount = g.Count()
+            })
+            .OrderBy(x => x.Season)
+            .ToList();
+
+        var dto = new LeagueAnalysisDto
+        {
+            ChampionTimeline = championTimeline,
+            TitlesByClub = titlesByClub,
+            Top4ByClub = top4ByClub,
+            PointsByClubBySeason = pointsByClub,
+            LeagueGoalsBySeason = leagueGoalsBySeason,
+            Seasons = seasonsOrdered
+        };
+        return dto;
+    }
+
+    /// <summary>Past champions for a league from honours (LeagueHonourMap → HonourWinners). Returns empty if no mapping exists.</summary>
+    [HttpGet("by-external/{sportsDbId}/champions")]
+    public async Task<ActionResult<List<ChampionTimelineItemDto>>> GetChampionsByExternalId(string sportsDbId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(sportsDbId)) return NotFound();
+        var lid = sportsDbId.Trim();
+
+        var honourIds = await _db.LeagueHonourMaps
+            .AsNoTracking()
+            .Where(m => m.LeagueId == lid)
+            .Select(m => m.HonourId)
+            .ToListAsync(ct);
+        if (honourIds.Count == 0)
+            return new List<ChampionTimelineItemDto>();
+
+        var winners = await _db.HonourWinners
+            .AsNoTracking()
+            .Where(w => honourIds.Contains(w.HonourId))
+            .OrderByDescending(w => w.YearLabel)
+            .Select(w => new ChampionTimelineItemDto
+            {
+                Season = w.YearLabel,
+                TeamId = w.TeamId,
+                TeamName = w.TeamName ?? "",
+                TeamBadgeUrl = w.TeamBadgeUrl
+            })
+            .ToListAsync(ct);
+        return winners;
     }
 
     /// <summary>v2: GET schedule/league/{sportsDbId}/{season}. Returns all fixtures/results for that league season (API-first).</summary>
@@ -274,7 +507,8 @@ public class CompetitionsController : ControllerBase
                 AwayTeamCrestUrl = e.StrAwayTeamBadge,
                 HomeScore = e.IntHomeScore,
                 AwayScore = e.IntAwayScore,
-                Status = e.StrStatus ?? ""
+                Status = e.StrStatus ?? "",
+                ExternalId = e.IdEvent
             })
             .OrderBy(m => m.UtcDate)
             .ToList();

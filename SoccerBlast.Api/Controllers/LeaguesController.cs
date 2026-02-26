@@ -28,10 +28,12 @@ public class LeaguesController : ControllerBase
 
         tz ??= "America/New_York";
         var (startUtc, endUtc) = DateRangeService.GetUtcRangeForLocalDate(localDate.Date, tz);
+        var startOffset = new DateTimeOffset(startUtc, TimeSpan.Zero);
+        var endOffset = new DateTimeOffset(endUtc, TimeSpan.Zero);
 
         var leagues = await _db.Matches
             .AsNoTracking()
-            .Where(m => m.UtcDate >= startUtc && m.UtcDate < endUtc)
+            .Where(m => m.UtcDate >= startOffset && m.UtcDate < endOffset)
             .GroupBy(m => new { m.CompetitionId, m.Competition.Name, m.Competition.Country, m.Competition.BadgeUrl })
             .Select(g => new LeagueDto
             {

@@ -241,26 +241,42 @@ public sealed class TheSportsDbClient
         static string? NullTrim(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
     }
 
-    /// <summary>v2: GET search/venue/{query}. Returns venues matching query. Response: {"search": [venueObj, ...]}.</summary>
+    /// <summary>v2: GET search/venue/{query}. Tries slug first (e.g. emirates_stadium), then full name. Response: {"search": [venueObj, ...]}.</summary>
     public async Task<List<SportsDbVenueSearchResult>> SearchVenuesAsync(string query, CancellationToken ct = default)
     {
         var list = new List<SportsDbVenueSearchResult>();
         if (string.IsNullOrWhiteSpace(query)) return list;
 
-        var json = await SearchJsonWithSlugFallbackAsync("search/venue", query, ct);
-        if (string.IsNullOrWhiteSpace(json)) return list;
+        var slug = ToSlug(query);
+        var normalized = NormalizeSearchText(query);
+        var toTry = new List<string>();
+        if (!string.IsNullOrWhiteSpace(slug)) toTry.Add(slug);
+        if (!string.IsNullOrWhiteSpace(normalized) && !toTry.Contains(normalized, StringComparer.OrdinalIgnoreCase)) toTry.Add(normalized);
+        if (toTry.Count == 0) return list;
 
+        foreach (var q in toTry)
+        {
+            var json = await GetStringOrNullAsync($"search/venue/{Uri.EscapeDataString(q)}", ct);
+            if (string.IsNullOrWhiteSpace(json)) continue;
+            var parsed = ParseVenueSearchJson(json);
+            if (parsed.Count > 0) return parsed;
+        }
+
+        return list;
+    }
+
+    private static List<SportsDbVenueSearchResult> ParseVenueSearchJson(string json)
+    {
+        var list = new List<SportsDbVenueSearchResult>();
         using var doc = JsonDocument.Parse(json);
         if (!doc.RootElement.TryGetProperty("search", out var arr) || arr.ValueKind != JsonValueKind.Array)
             return list;
-
         foreach (var el in arr.EnumerateArray())
         {
             if (el.ValueKind != JsonValueKind.Object) continue;
             var id = GetValue(el, "idVenue");
             var name = GetValue(el, "strVenue");
             if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(name)) continue;
-
             list.Add(new SportsDbVenueSearchResult(
                 id.Trim(),
                 name.Trim(),
@@ -269,9 +285,7 @@ public sealed class TheSportsDbClient
                 NullTrim(GetValue(el, "strThumb"))
             ));
         }
-
         return list;
-
         static string? NullTrim(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
     }
 
@@ -283,6 +297,11 @@ public sealed class TheSportsDbClient
         using var resp = await http.GetAsync($"lookup/venue/{Uri.EscapeDataString(venueId)}", ct);
         if (resp.StatusCode == System.Net.HttpStatusCode.NotFound || !resp.IsSuccessStatusCode) return null;
         var json = await resp.Content.ReadAsStringAsync(ct);
+        return ParseVenueLookup(json);
+    }
+
+    private static SportsDbVenueLookup? ParseVenueLookup(string json)
+    {
         using var doc = JsonDocument.Parse(json);
         if (!doc.RootElement.TryGetProperty("lookup", out var arr) || arr.ValueKind != JsonValueKind.Array)
             return null;
@@ -293,13 +312,27 @@ public sealed class TheSportsDbClient
         if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(name)) return null;
         var capStr = GetValue(first, "intCapacity");
         int? capacity = !string.IsNullOrWhiteSpace(capStr) && int.TryParse(capStr, out var cap) ? cap : null;
+        var formedStr = GetValue(first, "intFormedYear");
+        int? formedYear = !string.IsNullOrWhiteSpace(formedStr) && int.TryParse(formedStr, out var fy) ? fy : null;
         return new SportsDbVenueLookup(
             id.Trim(),
             name.Trim(),
             NullTrim(GetValue(first, "strLocation")),
             NullTrim(GetValue(first, "strCountry")),
             capacity,
-            NullTrim(GetValue(first, "strThumb"))
+            NullTrim(GetValue(first, "strThumb")),
+            formedYear,
+            NullTrim(GetValue(first, "strMap")),
+            NullTrim(GetValue(first, "strDescriptionEN")),
+            NullTrim(GetValue(first, "strCost")),
+            NullTrim(GetValue(first, "strFanart1")),
+            NullTrim(GetValue(first, "strFanart2")),
+            NullTrim(GetValue(first, "strFanart3")),
+            NullTrim(GetValue(first, "strFanart4")),
+            NullTrim(GetValue(first, "strWebsite")),
+            NullTrim(GetValue(first, "strAlternate")),
+            NullTrim(GetValue(first, "strTimezone")),
+            NullTrim(GetValue(first, "strLogo"))
         );
         static string? NullTrim(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
     }
@@ -359,6 +392,31 @@ public sealed class TheSportsDbClient
         return list;
     }
 
+    /// <summary>v2: GET all/leagues. Returns all leagues with strSport = Soccer (idLeague, strLeague).</summary>
+    public async Task<List<SportsDbLeagueListItem>> ListAllLeaguesAsync(CancellationToken ct = default)
+    {
+        using var http = Create();
+        using var resp = await http.GetAsync("all/leagues", ct);
+        resp.EnsureSuccessStatusCode();
+        var json = await resp.Content.ReadAsStringAsync(ct);
+        using var doc = JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty("leagues", out var arr) && !doc.RootElement.TryGetProperty("all", out arr))
+            return new List<SportsDbLeagueListItem>();
+        if (arr.ValueKind != JsonValueKind.Array) return new List<SportsDbLeagueListItem>();
+        var list = new List<SportsDbLeagueListItem>();
+        foreach (var el in arr.EnumerateArray())
+        {
+            var sport = GetValue(el, "strSport");
+            if (string.IsNullOrWhiteSpace(sport) || !sport.Equals("Soccer", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var id = GetValue(el, "idLeague");
+            var name = GetValue(el, "strLeague");
+            if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(name)) continue;
+            list.Add(new SportsDbLeagueListItem(NullTrim(id) ?? id, NullTrim(name) ?? name));
+        }
+        return list;
+    }
+
     /// <summary>v2: GET lookup/league/{id}. Response: {"lookup": [leagueObj]} with rich league metadata.</summary>
     public async Task<SportsDbLeague?> LookupLeagueAsync(string leagueId, CancellationToken ct = default)
     {
@@ -395,6 +453,82 @@ public sealed class TheSportsDbClient
                 seasons.Add(season.Trim()!);
         }
         return seasons;
+    }
+
+    /// <summary>v2: GET list/seasons/{leagueId}. Returns list with strSeason, strBadge, strPoster, strDescriptionEN when present.</summary>
+    public async Task<List<SeasonDetailDto>> ListSeasonDetailsAsync(string leagueId, CancellationToken ct = default)
+    {
+        var list = new List<SeasonDetailDto>();
+        if (string.IsNullOrWhiteSpace(leagueId)) return list;
+
+        using var http = Create();
+        using var resp = await http.GetAsync($"list/seasons/{Uri.EscapeDataString(leagueId.Trim())}", ct);
+        if (!resp.IsSuccessStatusCode) return list;
+        var json = await resp.Content.ReadAsStringAsync(ct);
+        using var doc = JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty("list", out var arr) || arr.ValueKind != JsonValueKind.Array)
+            return list;
+        foreach (var s in arr.EnumerateArray())
+        {
+            var strSeason = GetValue(s, "strSeason");
+            if (string.IsNullOrWhiteSpace(strSeason)) continue;
+            list.Add(new SeasonDetailDto
+            {
+                StrSeason = strSeason.Trim()!,
+                StrBadge = GetValue(s, "strBadge"),
+                StrPoster = GetValue(s, "strPoster"),
+                StrDescriptionEN = GetValue(s, "strDescriptionEN")
+            });
+        }
+        return list;
+    }
+
+    /// <summary>v1: GET lookuptable.php?l={leagueId}&s={season}. Returns standings table (soccer only).</summary>
+    public async Task<List<LookupTableRowDto>> GetLookupTableAsync(string leagueId, string season, CancellationToken ct = default)
+    {
+        var rows = new List<LookupTableRowDto>();
+        if (string.IsNullOrWhiteSpace(leagueId) || string.IsNullOrWhiteSpace(season)) return rows;
+
+        using var http = _httpFactory.CreateClient("sportsdb-v1");
+        var path = $"lookuptable.php?l={Uri.EscapeDataString(leagueId.Trim())}&s={Uri.EscapeDataString(season.Trim())}";
+        using var resp = await http.GetAsync(path, ct);
+        if (!resp.IsSuccessStatusCode) return rows;
+        var json = await resp.Content.ReadAsStringAsync(ct);
+        if (string.IsNullOrWhiteSpace(json)) return rows;
+        JsonDocument doc;
+        try
+        {
+            doc = JsonDocument.Parse(json);
+        }
+        catch (JsonException)
+        {
+            return rows; // API returned non-JSON (e.g. HTML error, empty)
+        }
+        using (doc)
+        {
+        if (!doc.RootElement.TryGetProperty("table", out var arr) || arr.ValueKind != JsonValueKind.Array)
+            return rows;
+        foreach (var e in arr.EnumerateArray())
+        {
+            var rank = TryParseInt(GetValue(e, "intRank")) ?? TryParseInt(GetValue(e, "idStanding")) ?? 0;
+            rows.Add(new LookupTableRowDto
+            {
+                Rank = rank,
+                TeamName = GetValue(e, "strTeam") ?? "",
+                TeamBadgeUrl = GetValue(e, "strTeamBadge") ?? GetValue(e, "strBadge"),
+                Played = TryParseInt(GetValue(e, "intPlayed")) ?? 0,
+                Win = TryParseInt(GetValue(e, "intWin")) ?? 0,
+                Draw = TryParseInt(GetValue(e, "intDraw")) ?? 0,
+                Loss = TryParseInt(GetValue(e, "intLoss")) ?? 0,
+                GoalsFor = TryParseInt(GetValue(e, "intGoalsFor")) ?? 0,
+                GoalsAgainst = TryParseInt(GetValue(e, "intGoalsAgainst")) ?? 0,
+                GoalDifference = TryParseInt(GetValue(e, "intGoalDifference")) ?? 0,
+                Points = TryParseInt(GetValue(e, "intPoints")) ?? 0,
+                Form = GetValue(e, "strForm")
+            });
+        }
+        return rows.OrderBy(r => r.Rank).ToList();
+        }
     }
 
     /// <summary>v2: GET schedule/league/{idLeague}/{season}. Returns all events (fixtures/results) for that league season.</summary>
@@ -474,6 +608,11 @@ public sealed class TheSportsDbClient
         if (resp.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
         resp.EnsureSuccessStatusCode();
         var json = await resp.Content.ReadAsStringAsync(ct);
+        return ParsePlayerLookup(json);
+    }
+
+    private static SportsDbPlayerLookup? ParsePlayerLookup(string json)
+    {
         using var doc = JsonDocument.Parse(json);
         if (!doc.RootElement.TryGetProperty("lookup", out var arr) || arr.ValueKind != JsonValueKind.Array)
             return null;
@@ -489,9 +628,438 @@ public sealed class TheSportsDbClient
             StrNationality: NullTrim(GetValue(first, "strNationality")),
             DateBorn: NullTrim(GetValue(first, "dateBorn")),
             StrThumb: NullTrim(GetValue(first, "strThumb")),
-            StrTeam: NullTrim(GetValue(first, "strTeam"))
+            StrTeam: NullTrim(GetValue(first, "strTeam")),
+            StrNumber: NullTrim(GetValue(first, "strNumber")),
+            StrHeight: NullTrim(GetValue(first, "strHeight")),
+            StrWeight: NullTrim(GetValue(first, "strWeight")),
+            StrWage: NullTrim(GetValue(first, "strWage")),
+            StrSigning: NullTrim(GetValue(first, "strSigning")),
+            StrCartoon: NullTrim(GetValue(first, "strCartoon")),
+            StrCutout: NullTrim(GetValue(first, "strCutout")),
+            StrRender: NullTrim(GetValue(first, "strRender")),
+            StrBanner: NullTrim(GetValue(first, "strBanner")),
+            StrInstagram: NullTrim(GetValue(first, "strInstagram")),
+            StrFacebook: NullTrim(GetValue(first, "strFacebook")),
+            StrTwitter: NullTrim(GetValue(first, "strTwitter")),
+            StrYoutube: NullTrim(GetValue(first, "strYoutube")),
+            StrWebsite: NullTrim(GetValue(first, "strWebsite")),
+            StrDescriptionEN: NullTrim(GetValue(first, "strDescriptionEN")),
+            StrForm: NullTrim(GetValue(first, "strForm")),
+            StrStats: NullTrim(GetValue(first, "strStats")),
+            StrStatus: NullTrim(GetValue(first, "strStatus")),
+            StrGender: NullTrim(GetValue(first, "strGender")),
+            StrSide: NullTrim(GetValue(first, "strSide")),
+            StrCollege: NullTrim(GetValue(first, "strCollege")),
+            StrPoster: NullTrim(GetValue(first, "strPoster")),
+            StrFanart1: NullTrim(GetValue(first, "strFanart1")),
+            StrFanart2: NullTrim(GetValue(first, "strFanart2")),
+            StrFanart3: NullTrim(GetValue(first, "strFanart3")),
+            StrFanart4: NullTrim(GetValue(first, "strFanart4")),
+            StrKit: NullTrim(GetValue(first, "strKit")) ?? NullTrim(GetValue(first, "strJersey")),
+            StrAgent: NullTrim(GetValue(first, "strAgent")),
+            StrBirthLocation: NullTrim(GetValue(first, "strBirthLocation")),
+            StrEthnicity: NullTrim(GetValue(first, "strEthnicity"))
         );
         static string? NullTrim(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+    }
+
+    /// <summary>v2: GET lookup/event/{idEvent}. Core match info.</summary>
+    public async Task<MatchDetailDto?> LookupEventAsync(string idEvent, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(idEvent)) return null;
+        var json = await GetStringOrNullAsync($"lookup/event/{Uri.EscapeDataString(idEvent)}", ct);
+        return string.IsNullOrWhiteSpace(json) ? null : ParseEventLookup(json);
+    }
+
+    private static MatchDetailDto? ParseEventLookup(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty("lookup", out var arr) || arr.ValueKind != JsonValueKind.Array)
+            return null;
+        var first = arr.EnumerateArray().FirstOrDefault();
+        if (first.ValueKind != JsonValueKind.Object) return null;
+        var id = GetValue(first, "idEvent");
+        if (string.IsNullOrWhiteSpace(id)) return null;
+        var dateEvent = GetValue(first, "dateEvent");
+        var strTime = GetValue(first, "strTime");
+        var utc = ParseEventDateUtc(dateEvent, strTime);
+        return new MatchDetailDto
+        {
+            IdEvent = id.Trim(),
+            StrEvent = NullTrim(GetValue(first, "strEvent")),
+            StrFilename = NullTrim(GetValue(first, "strFilename")),
+            StrSport = NullTrim(GetValue(first, "strSport")),
+            IdLeague = NullTrim(GetValue(first, "idLeague")),
+            StrLeague = NullTrim(GetValue(first, "strLeague")),
+            StrLeagueBadge = NullTrim(GetValue(first, "strLeagueBadge")),
+            StrSeason = NullTrim(GetValue(first, "strSeason")),
+            StrRound = NullTrim(GetValue(first, "strRound")),
+            IdHomeTeam = NullTrim(GetValue(first, "idHomeTeam") ?? GetValue(first, "idTeamHome")),
+            IdAwayTeam = NullTrim(GetValue(first, "idAwayTeam") ?? GetValue(first, "idTeamAway")),
+            StrHomeTeam = NullTrim(GetValue(first, "strHomeTeam")),
+            StrAwayTeam = NullTrim(GetValue(first, "strAwayTeam")),
+            StrHomeTeamBadge = NullTrim(GetValue(first, "strHomeTeamBadge")),
+            StrAwayTeamBadge = NullTrim(GetValue(first, "strAwayTeamBadge")),
+            DateEvent = NullTrim(dateEvent),
+            StrTime = NullTrim(strTime),
+            UtcDate = utc,
+            IntHomeScore = TryParseInt(GetValue(first, "intHomeScore")),
+            IntAwayScore = TryParseInt(GetValue(first, "intAwayScore")),
+            StrStatus = NullTrim(GetValue(first, "strStatus")),
+            StrProgress = NullTrim(GetValue(first, "strProgress")),
+            StrResult = NullTrim(GetValue(first, "strResult")),
+            StrVenue = NullTrim(GetValue(first, "strVenue")),
+            IdVenue = NullTrim(GetValue(first, "idVenue")),
+            StrCountry = NullTrim(GetValue(first, "strCountry")),
+            StrThumb = NullTrim(GetValue(first, "strThumb")),
+            StrBanner = NullTrim(GetValue(first, "strBanner")),
+            StrPoster = NullTrim(GetValue(first, "strPoster")),
+            StrFanart = NullTrim(GetValue(first, "strFanart"))
+        };
+
+        static string? NullTrim(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+        static int? TryParseInt(string? s) => int.TryParse(s, out var n) ? n : null;
+        static DateTime? ParseEventDateUtc(string? dateEvent, string? strTime)
+        {
+            if (string.IsNullOrWhiteSpace(dateEvent)) return null;
+            if (!DateTime.TryParse(dateEvent.Trim(), out var d)) return null;
+            if (!string.IsNullOrWhiteSpace(strTime) && TimeSpan.TryParse(strTime.Trim(), out var t))
+                d = d.Date.Add(t);
+            return DateTime.SpecifyKind(d, DateTimeKind.Utc);
+        }
+    }
+
+    /// <summary>v2: GET lookup/event_lineup/{idEvent}. Home/away lineups.</summary>
+    public async Task<EventLineupDto?> LookupEventLineupAsync(string idEvent, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(idEvent)) return null;
+        var json = await GetStringOrNullAsync($"lookup/event_lineup/{Uri.EscapeDataString(idEvent)}", ct);
+        return string.IsNullOrWhiteSpace(json) ? null : ParseEventLineup(json);
+    }
+
+    private static EventLineupDto? ParseEventLineup(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var lineup = new EventLineupDto();
+        foreach (var key in new[] { "lookup", "lineup", "lineups" })
+        {
+            if (!doc.RootElement.TryGetProperty(key, out var arr) || arr.ValueKind != JsonValueKind.Array) continue;
+            var homePlayers = new List<EventLineupPlayerDto>();
+            var awayPlayers = new List<EventLineupPlayerDto>();
+            string? idHome = GetValue(doc.RootElement, "idHomeTeam");
+            string? idAway = GetValue(doc.RootElement, "idAwayTeam");
+            foreach (var el in arr.EnumerateArray())
+            {
+                if (el.ValueKind != JsonValueKind.Object) continue;
+                var idTeam = GetValue(el, "idTeam");
+                var strTeam = GetValue(el, "strTeam");
+                var isHome = !string.IsNullOrEmpty(idHome) && idTeam == idHome
+                    || !string.IsNullOrEmpty(idAway) && idTeam != idAway
+                    || (string.IsNullOrEmpty(idHome) && string.IsNullOrEmpty(idAway) && homePlayers.Count < 12);
+                var p = new EventLineupPlayerDto
+                {
+                    IdPlayer = NullTrim(GetValue(el, "idPlayer")),
+                    StrPlayer = NullTrim(GetValue(el, "strPlayer")),
+                    StrPosition = NullTrim(GetValue(el, "strPosition")),
+                    StrNumber = NullTrim(GetValue(el, "strNumber")),
+                    StrGrid = NullTrim(GetValue(el, "strGrid")),
+                    StrRole = NullTrim(GetValue(el, "strRole")),
+                    IdTeam = NullTrim(idTeam),
+                    StrTeam = NullTrim(strTeam),
+                    StrThumb = NullTrim(GetValue(el, "strThumb")),
+                    StrCutout = NullTrim(GetValue(el, "strCutout")),
+                    StrNationality = NullTrim(GetValue(el, "strNationality"))
+                };
+                if (isHome) homePlayers.Add(p); else awayPlayers.Add(p);
+            }
+            if (homePlayers.Count > 0 || awayPlayers.Count > 0)
+            {
+                lineup.Home = new EventLineupTeamDto { IdTeam = idHome, StrTeam = homePlayers.FirstOrDefault()?.StrTeam, StrTeamBadge = NullTrim(GetValue(doc.RootElement, "strHomeTeamBadge")), Players = homePlayers };
+                lineup.Away = new EventLineupTeamDto { IdTeam = idAway, StrTeam = awayPlayers.FirstOrDefault()?.StrTeam, StrTeamBadge = NullTrim(GetValue(doc.RootElement, "strAwayTeamBadge")), Players = awayPlayers };
+                return lineup;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>v2: GET lookup/event_timeline/{idEvent}. Goals, cards, subs.</summary>
+    public async Task<List<EventTimelineItemDto>> LookupEventTimelineAsync(string idEvent, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(idEvent)) return new List<EventTimelineItemDto>();
+        var json = await GetStringOrNullAsync($"lookup/event_timeline/{Uri.EscapeDataString(idEvent)}", ct);
+        return string.IsNullOrWhiteSpace(json) ? new List<EventTimelineItemDto>() : ParseEventTimeline(json);
+    }
+
+    private static List<EventTimelineItemDto> ParseEventTimeline(string json)
+    {
+        var list = new List<EventTimelineItemDto>();
+        using var doc = JsonDocument.Parse(json);
+        foreach (var key in new[] { "lookup", "timeline", "timelines" })
+        {
+            if (!doc.RootElement.TryGetProperty(key, out var arr) || arr.ValueKind != JsonValueKind.Array) continue;
+            foreach (var el in arr.EnumerateArray())
+            {
+                if (el.ValueKind != JsonValueKind.Object) continue;
+                list.Add(new EventTimelineItemDto
+                {
+                    StrTime = NullTrim(GetValue(el, "strTime")),
+                    StrTimeline = NullTrim(GetValue(el, "strTimeline")),
+                    StrPlayer = NullTrim(GetValue(el, "strPlayer")),
+                    StrTeam = NullTrim(GetValue(el, "strTeam")),
+                    IdPlayer = NullTrim(GetValue(el, "idPlayer")),
+                    IdTeam = NullTrim(GetValue(el, "idTeam")),
+                    StrDetail = NullTrim(GetValue(el, "strDetail")),
+                    StrEvent = NullTrim(GetValue(el, "strEvent"))
+                });
+            }
+            break;
+        }
+        return list.OrderBy(x => int.TryParse(x.StrTime, out var m) ? m : 999).ToList();
+    }
+
+    /// <summary>v2: GET lookup/event_stats/{idEvent}. Possession, shots, etc.</summary>
+    public async Task<List<EventStatRowDto>> LookupEventStatsAsync(string idEvent, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(idEvent)) return new List<EventStatRowDto>();
+        var json = await GetStringOrNullAsync($"lookup/event_stats/{Uri.EscapeDataString(idEvent)}", ct);
+        return string.IsNullOrWhiteSpace(json) ? new List<EventStatRowDto>() : ParseEventStats(json);
+    }
+
+    private static List<EventStatRowDto> ParseEventStats(string json)
+    {
+        var list = new List<EventStatRowDto>();
+        using var doc = JsonDocument.Parse(json);
+        foreach (var key in new[] { "lookup", "stats", "statistics" })
+        {
+            if (!doc.RootElement.TryGetProperty(key, out var arr) || arr.ValueKind != JsonValueKind.Array) continue;
+            foreach (var el in arr.EnumerateArray())
+            {
+                if (el.ValueKind != JsonValueKind.Object) continue;
+                list.Add(new EventStatRowDto
+                {
+                    StrStat = NullTrim(GetValue(el, "strStat")),
+                    IntHome = TryParseInt(GetValue(el, "intHome")),
+                    IntAway = TryParseInt(GetValue(el, "intAway"))
+                });
+            }
+            break;
+        }
+        return list;
+    }
+
+    /// <summary>v2: GET lookup/event_highlights/{idEvent}. YouTube links.</summary>
+    public async Task<List<EventHighlightDto>> LookupEventHighlightsAsync(string idEvent, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(idEvent)) return new List<EventHighlightDto>();
+        var json = await GetStringOrNullAsync($"lookup/event_highlights/{Uri.EscapeDataString(idEvent)}", ct);
+        return string.IsNullOrWhiteSpace(json) ? new List<EventHighlightDto>() : ParseEventHighlights(json);
+    }
+
+    private static List<EventHighlightDto> ParseEventHighlights(string json)
+    {
+        var list = new List<EventHighlightDto>();
+        using var doc = JsonDocument.Parse(json);
+        foreach (var key in new[] { "lookup", "highlights", "videos" })
+        {
+            if (!doc.RootElement.TryGetProperty(key, out var arr) || arr.ValueKind != JsonValueKind.Array) continue;
+            foreach (var el in arr.EnumerateArray())
+            {
+                if (el.ValueKind != JsonValueKind.Object) continue;
+                var url = GetValue(el, "strVideo") ?? GetValue(el, "strURL");
+                if (string.IsNullOrWhiteSpace(url)) continue;
+                list.Add(new EventHighlightDto
+                {
+                    StrVideo = url.Trim(),
+                    StrThumb = NullTrim(GetValue(el, "strThumb")),
+                    StrTitle = NullTrim(GetValue(el, "strTitle"))
+                });
+            }
+            break;
+        }
+        return list;
+    }
+
+    /// <summary>v2: GET lookup/event_tv/{idEvent}. TV channels/regions.</summary>
+    public async Task<List<EventTvDto>> LookupEventTvAsync(string idEvent, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(idEvent)) return new List<EventTvDto>();
+        var json = await GetStringOrNullAsync($"lookup/event_tv/{Uri.EscapeDataString(idEvent)}", ct);
+        return string.IsNullOrWhiteSpace(json) ? new List<EventTvDto>() : ParseEventTv(json);
+    }
+
+    private static List<EventTvDto> ParseEventTv(string json)
+    {
+        var list = new List<EventTvDto>();
+        using var doc = JsonDocument.Parse(json);
+        foreach (var key in new[] { "lookup", "tv", "tvlist" })
+        {
+            if (!doc.RootElement.TryGetProperty(key, out var arr) || arr.ValueKind != JsonValueKind.Array) continue;
+            foreach (var el in arr.EnumerateArray())
+            {
+                if (el.ValueKind != JsonValueKind.Object) continue;
+                list.Add(new EventTvDto
+                {
+                    StrChannel = NullTrim(GetValue(el, "strChannel")),
+                    StrCountry = NullTrim(GetValue(el, "strCountry"))
+                });
+            }
+            break;
+        }
+        return list;
+    }
+
+    /// <summary>v2: GET lookup/player_contracts/{id}. Response often: {"lookup": [...]} or {"contracts": [...]}.</summary>
+    public async Task<List<PlayerContractDto>> LookupPlayerContractsAsync(string playerId, CancellationToken ct = default)
+    {
+        return await LookupPlayerArrayAsync(playerId, "player_contracts", new[] { "lookup", "contracts", "player_contracts" }, ParseContract, ct);
+    }
+
+    /// <summary>v2: GET lookup/player_teams/{id}. Former teams / career.</summary>
+    public async Task<List<PlayerFormerTeamDto>> LookupPlayerFormerTeamsAsync(string playerId, CancellationToken ct = default)
+    {
+        return await LookupPlayerArrayAsync(playerId, "player_teams", new[] { "lookup", "formerteams", "player_teams", "teams" }, ParseFormerTeam, ct);
+    }
+
+    /// <summary>v2: GET lookup/player_honours/{id}.</summary>
+    public async Task<List<PlayerHonourDto>> LookupPlayerHonoursAsync(string playerId, CancellationToken ct = default)
+    {
+        return await LookupPlayerArrayAsync(playerId, "player_honours", new[] { "lookup", "honours", "player_honours" }, ParseHonour, ct);
+    }
+
+    /// <summary>v2: GET lookup/player_milestones/{id}.</summary>
+    public async Task<List<PlayerMilestoneDto>> LookupPlayerMilestonesAsync(string playerId, CancellationToken ct = default)
+    {
+        return await LookupPlayerArrayAsync(playerId, "player_milestones", new[] { "lookup", "milestones", "milestone", "player_milestones" }, ParseMilestone, ct);
+    }
+
+    /// <summary>v2: GET lookup/player_results/{id}. Recent results.</summary>
+    public async Task<List<PlayerResultDto>> LookupPlayerResultsAsync(string playerId, CancellationToken ct = default)
+    {
+        return await LookupPlayerArrayAsync(playerId, "player_results", new[] { "lookup", "results", "player_results" }, ParsePlayerResult, ct);
+    }
+
+    private async Task<List<T>> LookupPlayerArrayAsync<T>(string playerId, string pathSegment, string[] arrayKeys, Func<JsonElement, T> parse, CancellationToken ct)
+    {
+        var list = new List<T>();
+        if (string.IsNullOrWhiteSpace(playerId)) return list;
+        using var http = Create();
+        using var resp = await http.GetAsync($"lookup/{pathSegment}/{Uri.EscapeDataString(playerId)}", ct);
+        if (!resp.IsSuccessStatusCode) return list;
+        var json = await resp.Content.ReadAsStringAsync(ct);
+        using var doc = JsonDocument.Parse(json);
+        foreach (var key in arrayKeys)
+        {
+            if (doc.RootElement.TryGetProperty(key, out var arr) && arr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var el in arr.EnumerateArray())
+                {
+                    if (el.ValueKind != JsonValueKind.Object) continue;
+                    try
+                    {
+                        list.Add(parse(el));
+                    }
+                    catch
+                    {
+                        // skip malformed item
+                    }
+                }
+                break;
+            }
+        }
+        return list;
+    }
+
+    private static string? GetValueOr(JsonElement el, params string[] keys)
+    {
+        foreach (var k in keys)
+        {
+            var v = GetValue(el, k);
+            if (!string.IsNullOrWhiteSpace(v)) return v;
+        }
+        return null;
+    }
+
+    private static PlayerContractDto ParseContract(JsonElement el)
+    {
+        return new PlayerContractDto
+        {
+            TeamId = NullTrim(GetValue(el, "idTeam")),
+            TeamName = GetValueOr(el, "strTeam", "strTeamName"),
+            TeamBadge = GetValueOr(el, "strTeamBadge", "strBadge"),
+            Sport = GetValue(el, "strSport"),
+            YearStart = GetValueOr(el, "strYearStart", "strSeasonStart"),
+            YearEnd = GetValueOr(el, "strYearEnd", "strSeasonEnd"),
+            Wage = GetValue(el, "strWage"),
+            Signing = GetValue(el, "strSigning")
+        };
+    }
+
+    private static PlayerFormerTeamDto ParseFormerTeam(JsonElement el)
+    {
+        var teamName = GetValueOr(el, "strTeam", "strTeamName", "strFormerTeam");
+        var contractType = GetValueOr(el, "strContractType", "strMoveType", "strType");
+        if (string.IsNullOrWhiteSpace(contractType) && !string.IsNullOrWhiteSpace(teamName) && teamName.Contains("Youth", StringComparison.OrdinalIgnoreCase))
+            contractType = "Youth";
+        return new PlayerFormerTeamDto
+        {
+            TeamId = NullTrim(GetValue(el, "idTeam")),
+            TeamName = teamName,
+            TeamBadge = GetValueOr(el, "strTeamBadge", "strBadge"),
+            Sport = GetValue(el, "strSport"),
+            YearStart = GetValueOr(el, "strYearStart", "strSeasonStart"),
+            YearEnd = GetValueOr(el, "strYearEnd", "strSeasonEnd"),
+            Joined = GetValue(el, "strJoined"),
+            Departed = GetValue(el, "strDeparted"),
+            ContractType = contractType
+        };
+    }
+
+    private static PlayerHonourDto ParseHonour(JsonElement el)
+    {
+        return new PlayerHonourDto
+        {
+            Title = GetValueOr(el, "strTitle", "strHonour"),
+            Competition = GetValueOr(el, "strCompetition", "strLeague"),
+            Season = GetValue(el, "strSeason"),
+            Honour = GetValueOr(el, "strHonour", "strTitle"),
+            HonourLogoUrl = GetValueOr(el, "strHonourLogo", "strHonourLogos", "strBadge", "strLogo"),
+            TrophyUrl = GetValueOr(el, "strHonourTrophy", "strTrophy")
+        };
+    }
+
+    private static PlayerMilestoneDto ParseMilestone(JsonElement el)
+    {
+        return new PlayerMilestoneDto
+        {
+            Name = GetValueOr(el, "strName", "strDescription", "strMilestone"),
+            Description = GetValueOr(el, "strDescription", "strName", "strMilestone"),
+            Season = GetValue(el, "strSeason"),
+            Stat = GetValue(el, "strStat"),
+            Team = GetValue(el, "strTeam"),
+            MilestoneLogoUrl = GetValue(el, "strMilestoneLogo"),
+            DateMilestone = GetValue(el, "dateMilestone"),
+            BadgeUrl = GetValueOr(el, "strMilestoneLogo", "strBadge", "strThumb", "strLogo")
+        };
+    }
+
+    private static PlayerResultDto ParsePlayerResult(JsonElement el)
+    {
+        var homeScoreStr = GetValue(el, "intHomeScore");
+        var awayScoreStr = GetValue(el, "intAwayScore");
+        int? homeScore = int.TryParse(homeScoreStr, out var h) ? h : null;
+        int? awayScore = int.TryParse(awayScoreStr, out var a) ? a : null;
+        return new PlayerResultDto
+        {
+            EventName = GetValue(el, "strEvent"),
+            League = GetValue(el, "strLeague"),
+            Season = GetValue(el, "strSeason"),
+            DateEvent = GetValue(el, "dateEvent"),
+            HomeTeam = GetValue(el, "strHomeTeam"),
+            AwayTeam = GetValue(el, "strAwayTeam"),
+            HomeScore = homeScore,
+            AwayScore = awayScore,
+            Result = GetValue(el, "strResult")
+        };
     }
 
     /// <summary>v2: GET list/players/{teamId}. Response: {"list": [playerObj, ...]}.</summary>
@@ -508,25 +1076,35 @@ public sealed class TheSportsDbClient
     {
         var players = new List<TeamPlayerDto>();
         using var doc = JsonDocument.Parse(json);
+
         if (!doc.RootElement.TryGetProperty("list", out var list) || list.ValueKind != JsonValueKind.Array)
             return players;
+
         foreach (var p in list.EnumerateArray())
         {
             var name = GetValue(p, "strPlayer");
             if (string.IsNullOrEmpty(name)) continue;
+
             players.Add(new TeamPlayerDto
             {
+                SportsDbPlayerId = GetValue(p, "idPlayer"),
                 Name = name,
                 Position = GetValue(p, "strPosition"),
                 Nationality = GetValue(p, "strNationality"),
-                ThumbUrl = GetValue(p, "strThumb")
+                ThumbUrl = GetValue(p, "strThumb"),
+                CutoutUrl = GetValue(p, "strCutout"),
+                RenderUrl = GetValue(p, "strRender"),
             });
         }
+
         return players;
     }
 
     private static string? GetValue(JsonElement el, string name)
         => el.TryGetProperty(name, out var p) && p.ValueKind != JsonValueKind.Null ? p.GetString() : null;
+
+    private static string? NullTrim(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+    private static int? TryParseInt(string? s) => int.TryParse(s, out var n) ? n : null;
     
     public async Task<List<SportsDbScheduleEvent>> GetNextTeamEventsAsync(string teamId, CancellationToken ct = default)
     {
@@ -541,6 +1119,28 @@ public sealed class TheSportsDbClient
     {
         using var http = Create();
         using var resp = await http.GetAsync($"schedule/previous/team/{Uri.EscapeDataString(teamId)}", ct);
+        if (!resp.IsSuccessStatusCode) return new();
+        var json = await resp.Content.ReadAsStringAsync(ct);
+        return ParseScheduleEvents(json);
+    }
+
+    /// <summary>v2: GET schedule/next/venue/{venueId}. Upcoming events at this venue.</summary>
+    public async Task<List<SportsDbScheduleEvent>> GetNextVenueEventsAsync(string venueId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(venueId)) return new();
+        using var http = Create();
+        using var resp = await http.GetAsync($"schedule/next/venue/{Uri.EscapeDataString(venueId.Trim())}", ct);
+        if (!resp.IsSuccessStatusCode) return new();
+        var json = await resp.Content.ReadAsStringAsync(ct);
+        return ParseScheduleEvents(json);
+    }
+
+    /// <summary>v2: GET schedule/previous/venue/{venueId}. Recent events at this venue.</summary>
+    public async Task<List<SportsDbScheduleEvent>> GetPreviousVenueEventsAsync(string venueId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(venueId)) return new();
+        using var http = Create();
+        using var resp = await http.GetAsync($"schedule/previous/venue/{Uri.EscapeDataString(venueId.Trim())}", ct);
         if (!resp.IsSuccessStatusCode) return new();
         var json = await resp.Content.ReadAsStringAsync(ct);
         return ParseScheduleEvents(json);
@@ -649,7 +1249,8 @@ public sealed record SportsDbLeague(
     string? StrFacebook,
     string? StrTwitter,
     string? StrInstagram,
-    string? StrYoutube
+    string? StrYoutube,
+    string? StrRSS
 )
 {
     public static SportsDbLeague FromJson(JsonElement e)
@@ -683,20 +1284,79 @@ public sealed record SportsDbLeague(
             StrFacebook: Get(e, "strFacebook"),
             StrTwitter: Get(e, "strTwitter"),
             StrInstagram: Get(e, "strInstagram"),
-            StrYoutube: Get(e, "strYoutube")
+            StrYoutube: Get(e, "strYoutube"),
+            StrRSS: Get(e, "strRSS")
         );
     }
 }
 
 public sealed record SportsDbLeagueSearchResult(string IdLeague, string StrLeague, string? StrBadge, string? StrCountry);
 
+/// <summary>Minimal league item from v2 all/leagues (Soccer only).</summary>
+public sealed record SportsDbLeagueListItem(string IdLeague, string StrLeague);
+
 public sealed record SportsDbPlayerSearchResult(string IdPlayer, string StrPlayer, string? StrPosition, string? StrTeam, string? StrSport, string? StrThumb);
 
-public sealed record SportsDbPlayerLookup(string IdPlayer, string StrPlayer, string? StrPosition, string? StrNationality, string? DateBorn, string? StrThumb, string? StrTeam);
+public sealed record SportsDbPlayerLookup(
+    string IdPlayer,
+    string StrPlayer,
+    string? StrPosition,
+    string? StrNationality,
+    string? DateBorn,
+    string? StrThumb,
+    string? StrTeam,
+    string? StrNumber = null,
+    string? StrHeight = null,
+    string? StrWeight = null,
+    string? StrWage = null,
+    string? StrSigning = null,
+    string? StrCartoon = null,
+    string? StrCutout = null,
+    string? StrRender = null,
+    string? StrBanner = null,
+    string? StrInstagram = null,
+    string? StrFacebook = null,
+    string? StrTwitter = null,
+    string? StrYoutube = null,
+    string? StrWebsite = null,
+    string? StrDescriptionEN = null,
+    string? StrForm = null,
+    string? StrStats = null,
+    string? StrStatus = null,
+    string? StrGender = null,
+    string? StrSide = null,
+    string? StrCollege = null,
+    string? StrPoster = null,
+    string? StrFanart1 = null,
+    string? StrFanart2 = null,
+    string? StrFanart3 = null,
+    string? StrFanart4 = null,
+    string? StrKit = null,
+    string? StrAgent = null,
+    string? StrBirthLocation = null,
+    string? StrEthnicity = null);
 
 public sealed record SportsDbVenueSearchResult(string IdVenue, string StrVenue, string? StrLocation, string? StrCountry, string? StrThumb);
 
-public sealed record SportsDbVenueLookup(string IdVenue, string StrVenue, string? StrLocation, string? StrCountry, int? IntCapacity, string? StrThumb);
+public sealed record SportsDbVenueLookup(
+    string IdVenue,
+    string StrVenue,
+    string? StrLocation,
+    string? StrCountry,
+    int? IntCapacity,
+    string? StrThumb,
+    int? IntFormedYear = null,
+    string? StrMap = null,
+    string? StrDescriptionEN = null,
+    string? StrCost = null,
+    string? StrFanart1 = null,
+    string? StrFanart2 = null,
+    string? StrFanart3 = null,
+    string? StrFanart4 = null,
+    string? StrWebsite = null,
+    string? StrAlternate = null,
+    string? StrTimezone = null,
+    string? StrLogo = null);
 
 public sealed record SportsDbScheduleEvent(
     string? IdEvent,

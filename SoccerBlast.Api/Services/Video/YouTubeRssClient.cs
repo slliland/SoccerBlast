@@ -78,7 +78,7 @@ public sealed class YouTubeRssClient
                 Url = watchUrl,
                 EmbedUrl = embedUrl,
                 ThumbnailUrl = thumbUrl,
-                PublishedAtUtc = published.ToUniversalTime(),
+                PublishedAtUtc = published,
                 DurationSeconds = null, // RSS doesn’t include duration reliably
                 CompetitionId = src.CompetitionId,
                 CompetitionName = src.CompetitionName,

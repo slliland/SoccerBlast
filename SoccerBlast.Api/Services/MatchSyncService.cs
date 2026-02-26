@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 using SoccerBlast.Api.Data;
 using SoccerBlast.Api.Models;
@@ -6,27 +7,58 @@ namespace SoccerBlast.Api.Services;
 
 public class MatchSyncService
 {
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> _syncLocks = new();
+
     private readonly AppDbContext _db;
     private readonly SportsDbMatchesClient _client;
     private readonly TheSportsDbClient _sportsDb;
+    private readonly ILogger<MatchSyncService> _log;
+
+    private static DateTime AsUtc(DateTime dt)
+    {
+        return dt.Kind switch
+        {
+            DateTimeKind.Utc => dt,
+            DateTimeKind.Local => dt.ToUniversalTime(),
+            DateTimeKind.Unspecified => DateTime.SpecifyKind(dt, DateTimeKind.Utc),
+            _ => dt
+        };
+    }
 
     private async Task<bool> IsTooSoonToResyncAsync(DateTime localDate, string syncType, int seconds = 60)
     {
-        var cutoff = DateTime.UtcNow.AddSeconds(-seconds);
+        var localDateOnly = DateOnly.FromDateTime(localDate);
+        var cutoffUtc = DateTime.UtcNow.AddSeconds(-seconds);
 
-        return await _db.SyncLogs.AnyAsync(l =>
-            l.SyncType == syncType &&
-            l.LocalDate == localDate.Date &&
-            l.Success == true &&
-            l.FinishedAtUtc >= cutoff);
+        _log.LogInformation("[Sync] IsTooSoonToResyncAsync querying SyncLogs...");
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            var cutoffOffset = new DateTimeOffset(cutoffUtc, TimeSpan.Zero);
+            var result = await _db.SyncLogs
+                .AsNoTracking()
+                .AnyAsync(l =>
+                    l.SyncType == syncType &&
+                    l.LocalDate == localDateOnly &&
+                    l.Success == true &&
+                    l.FinishedAtUtc >= cutoffOffset, cts.Token);
+            _log.LogInformation("[Sync] IsTooSoonToResyncAsync result={Result}", result);
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            _log.LogWarning("[Sync] IsTooSoonToResyncAsync timed out after 2s, proceeding with sync");
+            return false; // proceed when query hangs (e.g. DB lock, connection issue)
+        }
     }
 
 
-    public MatchSyncService(AppDbContext db, SportsDbMatchesClient client, TheSportsDbClient sportsDb)
+    public MatchSyncService(AppDbContext db, SportsDbMatchesClient client, TheSportsDbClient sportsDb, ILogger<MatchSyncService> log)
     {
         _db = db;
         _client = client;
         _sportsDb = sportsDb;
+        _log = log;
     }
 
     public sealed record EnsureRangeResult(
@@ -60,44 +92,127 @@ public class MatchSyncService
         }
     }
 
+    private void UpsertTeamInMemory(Dictionary<int, Team> existingTeams, int id, string name, string? crest)
+    {
+        if (!existingTeams.TryGetValue(id, out var team))
+        {
+            team = new Team
+            {
+                Id = id,
+                Name = name,
+                CrestUrl = crest,
+                SportsDbId = id.ToString()
+            };
+            _db.Teams.Add(team);
+            existingTeams[id] = team;
+        }
+        else
+        {
+            team.Name = name;
+            if (string.IsNullOrWhiteSpace(team.SportsDbId))
+                team.SportsDbId = id.ToString();
+            if (!string.IsNullOrWhiteSpace(crest))
+                team.CrestUrl = crest;
+        }
+    }
+
 
     public async Task<int> SyncLocalDateAsync(DateTime localDate, string timeZoneId = "America/New_York", string syncType = "DATE")
     {
         localDate = localDate.Date;
+        var dateKey = localDate.ToString("yyyy-MM-dd");
+        _log.LogInformation("[Sync] Start date={Date} tz={Tz}", dateKey, timeZoneId);
 
-        // Rate-limit protection
-        if (await IsTooSoonToResyncAsync(localDate, syncType, seconds: 60))
+        // Prevent duplicate concurrent sync for same date
+        var sem = _syncLocks.GetOrAdd(dateKey, _ => new SemaphoreSlim(1, 1));
+        if (!await sem.WaitAsync(TimeSpan.Zero))
+        {
+            _log.LogInformation("[Sync] Another sync already in progress for {Date}, skipping", dateKey);
             return 0;
+        }
+        try
+        {
+            return await SyncLocalDateInternalAsync(localDate, timeZoneId, syncType);
+        }
+        finally
+        {
+            sem.Release();
+        }
+    }
 
+    private async Task<int> SyncLocalDateInternalAsync(DateTime localDate, string timeZoneId, string syncType)
+    {
+        var swTotal = System.Diagnostics.Stopwatch.StartNew();
+        _log.LogInformation("[Sync] SyncLocalDateInternalAsync started | syncType={SyncType} | elapsed=0ms", syncType);
+
+        // Warmup: first use of DbContext gets a connection; with pooler this can block. Log how long it takes.
+        var tWarm = swTotal.ElapsedMilliseconds;
+        _log.LogInformation("[Sync] Step: connection warmup (SELECT 1) starting... | elapsed={Ms}ms", swTotal.ElapsedMilliseconds);
+        await _db.Database.ExecuteSqlRawAsync("SELECT 1");
+        _log.LogInformation("[Sync] Step: connection warmup done | took {Ms}ms | total={TotalMs}ms", swTotal.ElapsedMilliseconds - tWarm, swTotal.ElapsedMilliseconds);
+
+        // Rate-limit: skip for DIAG (avoids slow/hanging SyncLogs query and saves ~7s); apply for dashboard/background sync
+        if (!string.Equals(syncType, "DIAG", StringComparison.OrdinalIgnoreCase))
+        {
+            var t0 = swTotal.ElapsedMilliseconds;
+            _log.LogInformation("[Sync] Step: IsTooSoonToResyncAsync starting... | elapsed={Ms}ms", swTotal.ElapsedMilliseconds);
+            if (await IsTooSoonToResyncAsync(localDate, syncType, seconds: 60))
+            {
+                _log.LogInformation("[Sync] Rate-limited, skipping (took {Ms}ms)", swTotal.ElapsedMilliseconds - t0);
+                return 0;
+            }
+            _log.LogInformation("[Sync] Step: IsTooSoonToResyncAsync done | took {Ms}ms | total={TotalMs}ms", swTotal.ElapsedMilliseconds - t0, swTotal.ElapsedMilliseconds);
+        }
+
+        var t1a = swTotal.ElapsedMilliseconds;
+        _log.LogInformation("[Sync] Step: creating SyncLog entity... | elapsed={Ms}ms", swTotal.ElapsedMilliseconds);
         var log = new SyncLog
         {
             SyncType = syncType,
-            LocalDate = localDate,
-            StartedAtUtc = DateTime.UtcNow,
+            LocalDate = DateOnly.FromDateTime(localDate),
+            StartedAtUtc = DateTimeOffset.UtcNow,
             Success = false,
             SyncedMatches = 0
         };
 
+        var t1b = swTotal.ElapsedMilliseconds;
+        _log.LogInformation("[Sync] Step: Add(SyncLog) to context... | elapsed={Ms}ms", swTotal.ElapsedMilliseconds);
         _db.SyncLogs.Add(log);
+
+        var t1c = swTotal.ElapsedMilliseconds;
+        _log.LogInformation("[Sync] Step: SaveChangesAsync (INSERT SyncLog) starting... | elapsed={Ms}ms", swTotal.ElapsedMilliseconds);
         await _db.SaveChangesAsync(); // save early so status endpoint can see "in progress"
+        _log.LogInformation("[Sync] Step: SaveChangesAsync (SyncLog) done | took {Ms}ms | total={TotalMs}ms", swTotal.ElapsedMilliseconds - t1c, swTotal.ElapsedMilliseconds);
 
         try
         {
-            // local day to UTC range
+            var t1d = swTotal.ElapsedMilliseconds;
+            _log.LogInformation("[Sync] Step: GetUtcRangeForLocalDate... | elapsed={Ms}ms", swTotal.ElapsedMilliseconds);
             var (startUtc, endUtc) = DateRangeService.GetUtcRangeForLocalDate(localDate, timeZoneId);
-
             var dateFrom = startUtc.Date;
             var dateTo = endUtc.Date;
+            _log.LogInformation("[Sync] Step: UTC range {Start}..{End} | took {Ms}ms | total={TotalMs}ms", startUtc, endUtc, swTotal.ElapsedMilliseconds - t1d, swTotal.ElapsedMilliseconds);
 
+            var t2 = swTotal.ElapsedMilliseconds;
+            _log.LogInformation("[Sync] Step: SportsDB GetMatchesAsync starting... | elapsed={Ms}ms", swTotal.ElapsedMilliseconds);
             var items = await _client.GetMatchesAsync(dateFrom, dateTo);
+            _log.LogInformation("[Sync] Step: SportsDB GetMatchesAsync done | count={Count} | took {Ms}ms | total={TotalMs}ms", items.Count, swTotal.ElapsedMilliseconds - t2, swTotal.ElapsedMilliseconds);
 
-            // Filter first and don't delete if nothing is relevant
+            var t3 = swTotal.ElapsedMilliseconds;
+            _log.LogInformation("[Sync] Step: filter+dedupe starting... | elapsed={Ms}ms", swTotal.ElapsedMilliseconds);
+            // Filter first and dedupe by match Id (API can return same event twice across date boundaries)
             var filtered = items
                 .Select(m => (m, matchUtc: DateTime.SpecifyKind(m.UtcDate, DateTimeKind.Utc)))
                 .Where(x => x.matchUtc >= startUtc && x.matchUtc < endUtc)
+                .GroupBy(x => x.m.Id)
+                .Select(g => g.First())
                 .ToList();
+            _log.LogInformation("[Sync] Step: filter+dedupe done | matches={Count} | took {Ms}ms | total={TotalMs}ms", filtered.Count, swTotal.ElapsedMilliseconds - t3, swTotal.ElapsedMilliseconds);
 
+            var t4 = swTotal.ElapsedMilliseconds;
+            _log.LogInformation("[Sync] Step: fetching badges starting... | elapsed={Ms}ms", swTotal.ElapsedMilliseconds);
             // Fill missing league badges via v1 lookupleague.php (eventsday often omits strLeagueBadge)
+            var compsNeedingBadge = filtered.Where(x => string.IsNullOrWhiteSpace(x.m.Competition.Crest) && x.m.Competition.Id != 0).Select(x => x.m.Competition.Id).Distinct().ToList();
             var compBadges = new Dictionary<int, string?>();
             foreach (var (m, _) in filtered)
             {
@@ -120,89 +235,135 @@ public class MatchSyncService
                 if (string.IsNullOrWhiteSpace(m.Competition.Crest) && compBadges.TryGetValue(m.Competition.Id, out var badge) && !string.IsNullOrWhiteSpace(badge))
                     m.Competition.Crest = badge;
             }
+            _log.LogInformation("[Sync] Step: badges done | took {Ms}ms | total={TotalMs}ms", swTotal.ElapsedMilliseconds - t4, swTotal.ElapsedMilliseconds);
 
-            // Transaction, delete and insert as one unit
-            await using var tx = await _db.Database.BeginTransactionAsync();
+            var startOffset = new DateTimeOffset(startUtc, TimeSpan.Zero);
+            var endOffset = new DateTimeOffset(endUtc, TimeSpan.Zero);
 
-            // Delete all matches in that UTC window
-            await _db.Matches
-                .Where(x => x.UtcDate >= startUtc && x.UtcDate < endUtc)
-                .ExecuteDeleteAsync();
+            var compIds = filtered.Select(x => x.m.Competition.Id).Distinct().ToList();
+            var teamIds = filtered.SelectMany(x => new[] { x.m.HomeTeam.Id, x.m.AwayTeam.Id }).Distinct().ToList();
 
-            var ids = filtered.Select(x => x.m.Id).Distinct().ToList();
-            if (ids.Count > 0)
+            var strategy = _db.Database.CreateExecutionStrategy();
+            var t5 = swTotal.ElapsedMilliseconds;
+            _log.LogInformation("[Sync] Tx1: ExecuteDelete (date range) starting... | elapsed={Ms}ms", swTotal.ElapsedMilliseconds);
+            int totalDeleted = 0;
+            await strategy.ExecuteAsync(async () =>
             {
-                await _db.Matches
-                    .Where(x => ids.Contains(x.Id))
+                totalDeleted = await _db.Matches
+                    .Where(x => x.UtcDate >= startOffset && x.UtcDate < endOffset)
                     .ExecuteDeleteAsync();
-            }
+            });
+            _log.LogInformation("[Sync] Tx1: ExecuteDelete done | deleted={N} | took {Ms}ms | total={TotalMs}ms", totalDeleted, swTotal.ElapsedMilliseconds - t5, swTotal.ElapsedMilliseconds);
 
-            // Re-insert matches fresh plus ensure teams/competitions exist
-            foreach (var (m, matchUtc) in filtered)
+            var t7 = swTotal.ElapsedMilliseconds;
+            _log.LogInformation("[Sync] Tx2: upsert competitions starting... | elapsed={Ms}ms", swTotal.ElapsedMilliseconds);
+            await strategy.ExecuteAsync(async () =>
             {
-                Console.WriteLine($"HomeTeam {m.HomeTeam.Id} crest(from matches)='{m.HomeTeam.Crest}'");
-                Console.WriteLine($"AwayTeam {m.AwayTeam.Id} crest(from matches)='{m.AwayTeam.Crest}'");
-                // Upsert Competition
-                var comp = await _db.Competitions.FindAsync(m.Competition.Id);
-                if (comp == null)
+                var existingComps = await _db.Competitions.Where(c => compIds.Contains(c.Id)).ToDictionaryAsync(c => c.Id);
+                foreach (var (m, _) in filtered)
                 {
-                    comp = new Competition
+                    var cid = m.Competition.Id;
+                    if (!existingComps.TryGetValue(cid, out var comp))
                     {
-                        Id = m.Competition.Id,
-                        Name = m.Competition.Name,
-                        Country = m.Competition.Area?.Name,
-                        BadgeUrl = m.Competition.Crest
-                    };
-                    _db.Competitions.Add(comp);
+                        comp = new Competition { Id = cid, Name = m.Competition.Name, Country = m.Competition.Area?.Name, BadgeUrl = m.Competition.Crest };
+                        _db.Competitions.Add(comp);
+                        existingComps[cid] = comp;
+                    }
+                    else
+                    {
+                        comp.Name = m.Competition.Name;
+                        comp.Country = m.Competition.Area?.Name;
+                        if (!string.IsNullOrEmpty(m.Competition.Crest)) comp.BadgeUrl = m.Competition.Crest;
+                    }
                 }
-                else
+                await _db.SaveChangesAsync();
+            });
+            _log.LogInformation("[Sync] Tx2: upsert competitions done | took {Ms}ms | total={TotalMs}ms", swTotal.ElapsedMilliseconds - t7, swTotal.ElapsedMilliseconds);
+
+            var t8 = swTotal.ElapsedMilliseconds;
+            _log.LogInformation("[Sync] Tx3: upsert teams starting... | elapsed={Ms}ms", swTotal.ElapsedMilliseconds);
+            await strategy.ExecuteAsync(async () =>
+            {
+                var existingTeams = await _db.Teams.Where(t => teamIds.Contains(t.Id)).ToDictionaryAsync(t => t.Id);
+                foreach (var (m, _) in filtered)
                 {
-                    comp.Name = m.Competition.Name;
-                    comp.Country = m.Competition.Area?.Name;
-                    if (!string.IsNullOrEmpty(m.Competition.Crest))
-                        comp.BadgeUrl = m.Competition.Crest;
+                    UpsertTeamInMemory(existingTeams, m.HomeTeam.Id, m.HomeTeam.Name, m.HomeTeam.Crest);
+                    UpsertTeamInMemory(existingTeams, m.AwayTeam.Id, m.AwayTeam.Name, m.AwayTeam.Crest);
                 }
+                await _db.SaveChangesAsync();
+            });
+            _log.LogInformation("[Sync] Tx3: upsert teams done | took {Ms}ms | total={TotalMs}ms", swTotal.ElapsedMilliseconds - t8, swTotal.ElapsedMilliseconds);
 
-                // Upsert Teams
-                await UpsertTeamAsync(m.HomeTeam.Id, m.HomeTeam.Name, m.HomeTeam.Crest);
-                await UpsertTeamAsync(m.AwayTeam.Id, m.AwayTeam.Name, m.AwayTeam.Crest);
-
-                // Upsert Match
-                _db.Matches.Add(new Match
+            _log.LogInformation("[Sync] Tx4: insert matches (batches) starting... | elapsed={Ms}ms", swTotal.ElapsedMilliseconds);
+            const int matchInsertBatchSize = 25;
+            var t9Start = swTotal.ElapsedMilliseconds;
+            var insertedTotal = 0;
+            for (var i = 0; i < filtered.Count; i += matchInsertBatchSize)
+            {
+                var batch = filtered.Skip(i).Take(matchInsertBatchSize).ToList();
+                if (batch.Count == 0) continue;
+                var t9 = swTotal.ElapsedMilliseconds;
+                await strategy.ExecuteAsync(async () =>
                 {
-                    Id = m.Id,
-
-                    Provider = "SportsDbMatches",
-                    ExternalId = m.Id,
-
-                    UtcDate = matchUtc,
-                    Status = m.Status,
-                    CompetitionId = m.Competition.Id,
-                    HomeTeamId = m.HomeTeam.Id,
-                    AwayTeamId = m.AwayTeam.Id,
-                    HomeScore = m.Score.FullTime.Home,
-                    AwayScore = m.Score.FullTime.Away
+                    // Use raw SQL with ON CONFLICT DO UPDATE so duplicate Ids (from API or retries) update instead of failing
+                    var valueRows = new List<string>();
+                    var paramList = new List<object>();
+                    var idx = 0;
+                    foreach (var (m, matchUtc) in batch)
+                    {
+                        var utcOffset = new DateTimeOffset(DateTime.SpecifyKind(matchUtc, DateTimeKind.Utc), TimeSpan.Zero);
+                        valueRows.Add($"({{{idx}}}, {{{idx + 1}}}, {{{idx + 2}}}, {{{idx + 3}}}, {{{idx + 4}}}, {{{idx + 5}}}, {{{idx + 6}}}, {{{idx + 7}}}, {{{idx + 8}}}, {{{idx + 9}}})");
+                        paramList.Add(m.Id);
+                        paramList.Add("SportsDbMatches");
+                        paramList.Add(m.Id);
+                        paramList.Add(utcOffset);
+                        paramList.Add(m.Status ?? "");
+                        paramList.Add((object?)m.Score?.FullTime?.Home);
+                        paramList.Add((object?)m.Score?.FullTime?.Away);
+                        paramList.Add(m.Competition.Id);
+                        paramList.Add(m.HomeTeam.Id);
+                        paramList.Add(m.AwayTeam.Id);
+                        idx += 10;
+                    }
+                    var valuesClause = string.Join(", ", valueRows);
+                    var sql = $"""
+                        INSERT INTO "Matches" ("Id", "Provider", "ExternalId", "UtcDate", "Status", "HomeScore", "AwayScore", "CompetitionId", "HomeTeamId", "AwayTeamId")
+                        VALUES {valuesClause}
+                        ON CONFLICT ("Id") DO UPDATE SET
+                            "Provider" = EXCLUDED."Provider",
+                            "ExternalId" = EXCLUDED."ExternalId",
+                            "UtcDate" = EXCLUDED."UtcDate",
+                            "Status" = EXCLUDED."Status",
+                            "HomeScore" = EXCLUDED."HomeScore",
+                            "AwayScore" = EXCLUDED."AwayScore",
+                            "CompetitionId" = EXCLUDED."CompetitionId",
+                            "HomeTeamId" = EXCLUDED."HomeTeamId",
+                            "AwayTeamId" = EXCLUDED."AwayTeamId"
+                        """;
+                    await _db.Database.ExecuteSqlRawAsync(sql, paramList.ToArray());
                 });
+                insertedTotal += batch.Count;
+                _log.LogInformation("[Sync] Tx4: upserted matches batch {Batch} ({Count}), took {Ms}ms", (i / matchInsertBatchSize) + 1, batch.Count, swTotal.ElapsedMilliseconds - t9);
             }
+            _log.LogInformation("[Sync] Tx4 total: upserted {N} matches in {Batches} batches, took {Ms}ms", insertedTotal, (filtered.Count + matchInsertBatchSize - 1) / matchInsertBatchSize, swTotal.ElapsedMilliseconds - t9Start);
 
-            await _db.SaveChangesAsync();
-            await tx.CommitAsync();
-
-            log.Success = true;
-            log.SyncedMatches = filtered.Count;
-            log.FinishedAtUtc = DateTime.UtcNow;
-            log.ErrorMessage = null;
-
-            await _db.SaveChangesAsync();
+            var t12 = swTotal.ElapsedMilliseconds;
+            // Update SyncLog via raw SQL so we don't run SaveChanges on a context with many tracked entities (avoids NoData/ParseCompleteMessage)
+            var finishedUtc = DateTimeOffset.UtcNow;
+            await _db.Database.ExecuteSqlRawAsync(
+                "UPDATE \"SyncLogs\" SET \"Success\" = {0}, \"SyncedMatches\" = {1}, \"FinishedAtUtc\" = {2}, \"ErrorMessage\" = {3} WHERE \"Id\" = {4}",
+                true, filtered.Count, finishedUtc, (string?)null, log.Id);
+            swTotal.Stop();
+            _log.LogInformation("[Sync] Step: update SyncLog, took {Ms}ms | total sync {TotalMs}ms", swTotal.ElapsedMilliseconds - t12, swTotal.ElapsedMilliseconds);
             return filtered.Count;
         }
         catch (Exception ex)
         {
-            log.Success = false;
-            log.FinishedAtUtc = DateTime.UtcNow;
-            log.ErrorMessage = ex.Message;
-
-            await _db.SaveChangesAsync();
+            var finishedUtc = DateTimeOffset.UtcNow;
+            var errMsg = ex.Message ?? "";
+            await _db.Database.ExecuteSqlRawAsync(
+                "UPDATE \"SyncLogs\" SET \"Success\" = {0}, \"FinishedAtUtc\" = {1}, \"ErrorMessage\" = {2} WHERE \"Id\" = {3}",
+                false, finishedUtc, errMsg, log.Id);
             throw; // so Swagger shows the error too (during dev)
         }
     }
@@ -234,6 +395,7 @@ public class MatchSyncService
         var dateFrom = startUtc.Date;
         var dateTo = endUtc.Date;
 
+        // Range-focused fetch via existing matches client
         var items = await _client.GetMatchesAsync(dateFrom, dateTo);
 
         // Precompute Utc kind once
@@ -253,8 +415,8 @@ public class MatchSyncService
             var log = new SyncLog
             {
                 SyncType = "RANGE",
-                LocalDate = d,
-                StartedAtUtc = DateTime.UtcNow,
+                LocalDate = DateOnly.FromDateTime(d),
+                StartedAtUtc = DateTimeOffset.UtcNow,
                 Success = false,
                 SyncedMatches = 0
             };
@@ -270,72 +432,90 @@ public class MatchSyncService
                     .Where(x => x.matchUtc >= dayStartUtc && x.matchUtc < dayEndUtc)
                     .ToList();
 
-                await using var tx = await _db.Database.BeginTransactionAsync();
+                var dayStartOffset = new DateTimeOffset(dayStartUtc, TimeSpan.Zero);
+                var dayEndOffset = new DateTimeOffset(dayEndUtc, TimeSpan.Zero);
 
-                // Hard replace only this day window
-                await _db.Matches
-                    .Where(x => x.UtcDate >= dayStartUtc && x.UtcDate < dayEndUtc)
-                    .ExecuteDeleteAsync();
-                
-                var dayIds = dayMatches.Select(x => x.m.Id).Distinct().ToList();
-                if (dayIds.Count > 0)
+                var strategy = _db.Database.CreateExecutionStrategy();
+                await strategy.ExecuteAsync(async () =>
                 {
+                    await using var tx = await _db.Database.BeginTransactionAsync();
+
                     await _db.Matches
-                        .Where(x => dayIds.Contains(x.Id))
+                        .Where(x => x.UtcDate >= dayStartOffset && x.UtcDate < dayEndOffset)
                         .ExecuteDeleteAsync();
-                }
 
-                foreach (var (m, matchUtc) in dayMatches)
-                {
-                    // Upsert Competition
-                    var comp = await _db.Competitions.FindAsync(m.Competition.Id);
-                    if (comp == null)
+                    var dayIds = dayMatches.Select(x => x.m.Id).Distinct().ToList();
+                    if (dayIds.Count > 0)
                     {
-                        comp = new Competition
+                        await _db.Matches
+                            .Where(x => dayIds.Contains(x.Id))
+                            .ExecuteDeleteAsync();
+                    }
+
+                    var compIds = dayMatches.Select(x => x.m.Competition.Id).Distinct().ToList();
+                    var teamIds = dayMatches.SelectMany(x => new[] { x.m.HomeTeam.Id, x.m.AwayTeam.Id }).Distinct().ToList();
+
+                    var existingComps = await _db.Competitions
+                        .Where(c => compIds.Contains(c.Id))
+                        .ToDictionaryAsync(c => c.Id);
+                    var existingTeams = await _db.Teams
+                        .Where(t => teamIds.Contains(t.Id))
+                        .ToDictionaryAsync(t => t.Id);
+
+                    foreach (var (m, _) in dayMatches)
+                    {
+                        var cid = m.Competition.Id;
+                        if (!existingComps.TryGetValue(cid, out var comp))
                         {
-                            Id = m.Competition.Id,
-                            Name = m.Competition.Name,
-                            Country = m.Competition.Area?.Name,
-                            BadgeUrl = m.Competition.Crest
-                        };
-                        _db.Competitions.Add(comp);
+                            comp = new Competition
+                            {
+                                Id = cid,
+                                Name = m.Competition.Name,
+                                Country = m.Competition.Area?.Name,
+                                BadgeUrl = m.Competition.Crest
+                            };
+                            _db.Competitions.Add(comp);
+                            existingComps[cid] = comp;
+                        }
+                        else
+                        {
+                            comp.Name = m.Competition.Name;
+                            comp.Country = m.Competition.Area?.Name;
+                            if (!string.IsNullOrEmpty(m.Competition.Crest))
+                                comp.BadgeUrl = m.Competition.Crest;
+                        }
                     }
-                    else
+
+                    foreach (var (m, _) in dayMatches)
                     {
-                        comp.Name = m.Competition.Name;
-                        comp.Country = m.Competition.Area?.Name;
-                        if (!string.IsNullOrEmpty(m.Competition.Crest))
-                            comp.BadgeUrl = m.Competition.Crest;
+                        UpsertTeamInMemory(existingTeams, m.HomeTeam.Id, m.HomeTeam.Name, m.HomeTeam.Crest);
+                        UpsertTeamInMemory(existingTeams, m.AwayTeam.Id, m.AwayTeam.Name, m.AwayTeam.Crest);
                     }
 
-                    // Upsert Teams
-                    await UpsertTeamAsync(m.HomeTeam.Id, m.HomeTeam.Name, m.HomeTeam.Crest);
-                    await UpsertTeamAsync(m.AwayTeam.Id, m.AwayTeam.Name, m.AwayTeam.Crest);
-
-                    // Insert Match
-                    _db.Matches.Add(new Match
+                    foreach (var (m, matchUtc) in dayMatches)
                     {
-                        Id = m.Id,
+                        _db.Matches.Add(new Match
+                        {
+                            Id = m.Id,
+                            Provider = "SportsDbMatches",
+                            ExternalId = m.Id,
+                            UtcDate = new DateTimeOffset(DateTime.SpecifyKind(matchUtc, DateTimeKind.Utc), TimeSpan.Zero),
+                            Status = m.Status,
+                            CompetitionId = m.Competition.Id,
+                            HomeTeamId = m.HomeTeam.Id,
+                            AwayTeamId = m.AwayTeam.Id,
+                            HomeScore = m.Score.FullTime.Home,
+                            AwayScore = m.Score.FullTime.Away
+                        });
+                    }
 
-                        Provider = "SportsDbMatches",
-                        ExternalId = m.Id,
-
-                        UtcDate = matchUtc,
-                        Status = m.Status,
-                        CompetitionId = m.Competition.Id,
-                        HomeTeamId = m.HomeTeam.Id,
-                        AwayTeamId = m.AwayTeam.Id,
-                        HomeScore = m.Score.FullTime.Home,
-                        AwayScore = m.Score.FullTime.Away
-                    });
-                }
-
-                await _db.SaveChangesAsync();
-                await tx.CommitAsync();
+                    await _db.SaveChangesAsync();
+                    await tx.CommitAsync();
+                });
 
                 log.Success = true;
                 log.SyncedMatches = dayMatches.Count;
-                log.FinishedAtUtc = DateTime.UtcNow;
+                log.FinishedAtUtc = DateTimeOffset.UtcNow;
                 log.ErrorMessage = null;
 
                 await _db.SaveChangesAsync();
@@ -346,7 +526,7 @@ public class MatchSyncService
             catch (Exception ex)
             {
                 log.Success = false;
-                log.FinishedAtUtc = DateTime.UtcNow;
+                log.FinishedAtUtc = DateTimeOffset.UtcNow;
                 log.ErrorMessage = ex.Message;
 
                 await _db.SaveChangesAsync();
@@ -404,8 +584,10 @@ public class MatchSyncService
             var (dayStartUtc, dayEndUtc) = DateRangeService.GetUtcRangeForLocalDate(d.ToDateTime(TimeOnly.MinValue), tzId);
 
             // If DB has no matches for this local day, force sync
+            var dayStartOffset = new DateTimeOffset(dayStartUtc, TimeSpan.Zero);
+            var dayEndOffset = new DateTimeOffset(dayEndUtc, TimeSpan.Zero);
             var hasAny = await _db.Matches
-                .AnyAsync(m => m.UtcDate >= dayStartUtc && m.UtcDate < dayEndUtc, ct);
+                .AnyAsync(m => m.UtcDate >= dayStartOffset && m.UtcDate < dayEndOffset, ct);
             if (!hasAny)
             {
                 daysToSync.Add(d);
@@ -525,75 +707,78 @@ public class MatchSyncService
 
         if (combined.Count == 0) return 0;
 
-        await using var tx = await _db.Database.BeginTransactionAsync(ct);
-
-        int upserts = 0;
-
-        foreach (var (e, utc) in combined)
+        var strategy = _db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async (cancellationToken) =>
         {
-            ct.ThrowIfCancellationRequested();
-            int leagueId = int.TryParse(e.IdLeague, out var lid) ? lid : 0;
-            int homeId   = int.TryParse(e.IdHomeTeam, out var hid) ? hid : 0;
-            int awayId   = int.TryParse(e.IdAwayTeam, out var aid) ? aid : 0;
+            await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
 
-            if (leagueId == 0 || homeId == 0 || awayId == 0)
-                continue;
+            int upserts = 0;
 
-            // Upsert competition
-            var comp = await _db.Competitions.FindAsync(new object?[] { leagueId }, ct);
-            if (comp == null)
+            foreach (var (e, utc) in combined)
             {
-                comp = new Competition { Id = leagueId, Name = e.StrLeague ?? "League" };
-                _db.Competitions.Add(comp);
-            }
-            else
-            {
-                if (!string.IsNullOrWhiteSpace(e.StrLeague))
-                    comp.Name = e.StrLeague!;
-            }
+                cancellationToken.ThrowIfCancellationRequested();
+                int leagueId = int.TryParse(e.IdLeague, out var lid) ? lid : 0;
+                int homeId   = int.TryParse(e.IdHomeTeam, out var hid) ? hid : 0;
+                int awayId   = int.TryParse(e.IdAwayTeam, out var aid) ? aid : 0;
 
-            // Upsert teams
-            await UpsertTeamAsync(homeId, e.StrHomeTeam ?? "Home", e.StrHomeTeamBadge);
-            await UpsertTeamAsync(awayId, e.StrAwayTeam ?? "Away", e.StrAwayTeamBadge);
+                if (leagueId == 0 || homeId == 0 || awayId == 0)
+                    continue;
 
-            if (!int.TryParse(e.IdEvent, out var eventId))
-                continue;
-
-            var existing = await _db.Matches.FindAsync(new object?[] { eventId }, ct);
-            if (existing == null)
-            {
-                _db.Matches.Add(new Match
+                var comp = await _db.Competitions.FindAsync(new object?[] { leagueId }, cancellationToken);
+                if (comp == null)
                 {
-                    Id = eventId,
-                    Provider = "SportsDbSchedule",
-                    ExternalId = eventId,
-                    UtcDate = utc,
-                    Status = e.StrStatus ?? "",
-                    CompetitionId = leagueId,
-                    HomeTeamId = homeId,
-                    AwayTeamId = awayId,
-                    HomeScore = e.IntHomeScore,
-                    AwayScore = e.IntAwayScore
-                });
+                    comp = new Competition { Id = leagueId, Name = e.StrLeague ?? "League" };
+                    _db.Competitions.Add(comp);
+                }
+                else
+                {
+                    if (!string.IsNullOrWhiteSpace(e.StrLeague))
+                        comp.Name = e.StrLeague!;
+                }
+
+                await UpsertTeamAsync(homeId, e.StrHomeTeam ?? "Home", e.StrHomeTeamBadge);
+                await UpsertTeamAsync(awayId, e.StrAwayTeam ?? "Away", e.StrAwayTeamBadge);
+
+                if (!int.TryParse(e.IdEvent, out var eventId))
+                    continue;
+
+                var existing = await _db.Matches.FindAsync(new object?[] { eventId }, cancellationToken);
+                var utcOffset = new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc), TimeSpan.Zero);
+                if (existing == null)
+                {
+                    _db.Matches.Add(new Match
+                    {
+                        Id = eventId,
+                        Provider = "SportsDbSchedule",
+                        ExternalId = eventId,
+                        UtcDate = utcOffset,
+                        Status = e.StrStatus ?? "",
+                        CompetitionId = leagueId,
+                        HomeTeamId = homeId,
+                        AwayTeamId = awayId,
+                        HomeScore = e.IntHomeScore,
+                        AwayScore = e.IntAwayScore
+                    });
+                }
+                else
+                {
+                    existing.Provider = "SportsDbSchedule";
+                    existing.UtcDate = utcOffset;
+                    existing.Status = e.StrStatus ?? existing.Status;
+                    existing.CompetitionId = leagueId;
+                    existing.HomeTeamId = homeId;
+                    existing.AwayTeamId = awayId;
+                    existing.HomeScore = e.IntHomeScore;
+                    existing.AwayScore = e.IntAwayScore;
+                }
+
+                upserts++;
             }
-            else
-            {
-                existing.Provider = "SportsDbSchedule";
-                existing.UtcDate = utc;
-                existing.Status = e.StrStatus ?? existing.Status;
-                existing.CompetitionId = leagueId;
-                existing.HomeTeamId = homeId;
-                existing.AwayTeamId = awayId;
-                existing.HomeScore = e.IntHomeScore;
-                existing.AwayScore = e.IntAwayScore;
-            }
 
-            upserts++;
-        }
+            await _db.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
 
-        await _db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
-
-        return upserts;
+            return upserts;
+        }, ct);
     }
 }

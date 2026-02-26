@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SoccerBlast.Shared.Contracts;
@@ -23,47 +24,126 @@ public class SearchController : ControllerBase
         _fuzzy = fuzzy;
     }
 
-    private async Task UpsertAliasAsync(
-        AliasType type,
-        string canonical,
-        string alias,
-        string? externalId,
-        CancellationToken ct)
+    /// <summary>Candidate for batch alias upsert. Canonical and Alias must be trimmed; Alias length >= 3.</summary>
+    private record AliasCandidate(AliasType Type, string Canonical, string Alias, string? ExternalId);
+
+    /// <summary>EF Core cannot translate Contains(tuple); build (key1) OR (key2) OR ... so one query works.</summary>
+    private static IQueryable<SearchAlias> QuerySearchAliasesByKeys(
+        IQueryable<SearchAlias> source,
+        List<(AliasType Type, string Canonical, string Alias)> keys)
     {
-        canonical = (canonical ?? "").Trim();
-        alias = (alias ?? "").Trim();
-        if (string.IsNullOrWhiteSpace(canonical) || string.IsNullOrWhiteSpace(alias)) return;
-
-        // avoid saving "fc" / "cf" garbage as aliases
-        if (alias.Length < 3) return;
-
-        // normalized alias for fuzzy search
-        var aliasNorm = SearchText.Normalize(alias);
-        if (string.IsNullOrWhiteSpace(aliasNorm)) return;
-
-        var existing = await _db.SearchAliases
-            .FirstOrDefaultAsync(a => a.Type == type && a.Canonical == canonical && a.Alias == alias, ct);
-
-        if (existing == null)
+        if (keys.Count == 0) return source.Where(_ => false);
+        var param = Expression.Parameter(typeof(SearchAlias), "a");
+        Expression? body = null;
+        foreach (var (type, canonical, alias) in keys)
         {
+            var term = Expression.AndAlso(
+                Expression.AndAlso(
+                    Expression.Equal(Expression.Property(param, "Type"), Expression.Constant(type)),
+                    Expression.Equal(Expression.Property(param, "Canonical"), Expression.Constant(canonical))),
+                Expression.Equal(Expression.Property(param, "Alias"), Expression.Constant(alias)));
+            body = body == null ? term : Expression.OrElse(body, term);
+        }
+        if (body == null) return source.Where(_ => false);
+        var lambda = Expression.Lambda<Func<SearchAlias, bool>>(body, param);
+        return source.Where(lambda);
+    }
+
+    private static void AddAliasCandidates(
+        List<AliasCandidate> list,
+        AliasType type,
+        IEnumerable<(string Canonical, string? ExternalId)> items,
+        string? userQuery)
+    {
+        foreach (var (canonical, externalId) in items)
+        {
+            if (string.IsNullOrWhiteSpace(canonical)) continue;
+            var c = canonical.Trim();
+            list.Add(new AliasCandidate(type, c, c, externalId));
+            if (userQuery != null && userQuery.Length >= 3)
+                list.Add(new AliasCandidate(type, c, userQuery.Trim(), externalId));
+        }
+    }
+
+    /// <summary>Batch upsert: one query to resolve existing, then updates/adds and a single SaveChanges.</summary>
+    private async Task BatchUpsertAliasesAsync(List<AliasCandidate> candidates, CancellationToken ct)
+    {
+        var now = DateTime.UtcNow;
+        var normalized = new List<(AliasCandidate c, string AliasNorm)>();
+        foreach (var c in candidates)
+        {
+            var canon = (c.Canonical ?? "").Trim();
+            var alias = (c.Alias ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(canon) || string.IsNullOrWhiteSpace(alias) || alias.Length < 3) continue;
+            var aliasNorm = SearchText.Normalize(alias);
+            if (string.IsNullOrWhiteSpace(aliasNorm)) continue;
+            normalized.Add((c with { Canonical = canon, Alias = alias }, aliasNorm));
+        }
+
+        var deduped = normalized
+            .GroupBy(x => (x.c.Type, x.c.Canonical, x.c.Alias))
+            .Select(g =>
+            {
+                var first = g.First();
+                var externalId = g.Select(x => x.c.ExternalId).FirstOrDefault(e => !string.IsNullOrEmpty(e)) ?? first.c.ExternalId;
+                return (c: first.c with { ExternalId = externalId }, first.AliasNorm);
+            })
+            .ToList();
+        if (deduped.Count == 0) return;
+
+        var keys = deduped.Select(x => (x.c.Type, x.c.Canonical, x.c.Alias)).Distinct().ToList();
+        var existingList = keys.Count == 0
+            ? new List<SearchAlias>()
+            : await QuerySearchAliasesByKeys(_db.SearchAliases, keys.Take(120).ToList())
+                .ToListAsync(ct);
+
+        var existingByKey = existingList.ToDictionary(a => (a.Type, a.Canonical, a.Alias));
+
+        foreach (var (c, aliasNorm) in deduped)
+        {
+            var key = (c.Type, c.Canonical, c.Alias);
+            var existingLocal = _db.SearchAliases.Local
+                .FirstOrDefault(a => a.Type == c.Type && a.Canonical == c.Canonical && a.Alias == c.Alias);
+            if (existingLocal != null)
+            {
+                existingLocal.HitCount += 1;
+                existingLocal.ExternalId ??= c.ExternalId;
+                existingLocal.AliasNorm = aliasNorm;
+                existingLocal.UpdatedAtUtc = now;
+                continue;
+            }
+
+            if (existingByKey.TryGetValue(key, out var existing))
+            {
+                existing.HitCount += 1;
+                existing.ExternalId ??= c.ExternalId;
+                existing.AliasNorm = aliasNorm;
+                existing.UpdatedAtUtc = now;
+                continue;
+            }
+
             _db.SearchAliases.Add(new SearchAlias
             {
-                Type = type,
-                Canonical = canonical,
-                Alias = alias,
+                Type = c.Type,
+                Canonical = c.Canonical,
+                Alias = c.Alias,
                 AliasNorm = aliasNorm,
-                ExternalId = externalId,
+                ExternalId = c.ExternalId,
                 HitCount = 1,
-                CreatedAtUtc = DateTime.UtcNow,
-                UpdatedAtUtc = DateTime.UtcNow
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
             });
         }
-        else
+
+        try
         {
-            existing.HitCount += 1;
-            existing.ExternalId ??= externalId;
-            existing.AliasNorm = aliasNorm;
-            existing.UpdatedAtUtc = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex)
+        {
+            // SearchAliases.Id may have no default in DB (e.g. table created from SQLite migration).
+            // Log and continue so search still returns results; apply migration to fix Id column.
+            Console.WriteLine($"[Search] Alias save failed (search results still returned): {ex.InnerException?.Message ?? ex.Message}");
         }
     }
 
@@ -87,6 +167,7 @@ public class SearchController : ControllerBase
         if (q.Length < 2) return new List<SearchResultDto>();
 
         var per = Math.Max(2, limit / 4);
+        var aliasCandidates = new List<AliasCandidate>();
 
         var teamResults = new List<SearchResultDto>();
         try
@@ -129,19 +210,8 @@ public class SearchController : ControllerBase
                 .Take(30)
                 .ToList();
 
-            // Learn aliases (canonical + user query)
-            // Canonical: SportsDB's own name (e.g. "Barcelona")
-            // Alias: canonical itself, and also the user's query if it led to a good match
-            foreach (var t in soccerTeams)
-            {
-                if (string.IsNullOrWhiteSpace(t.StrTeam)) continue;
-
-                await UpsertAliasAsync(AliasType.Team, t.StrTeam!, t.StrTeam!, t.IdTeam, ct);
-
-                // If user typed something longer, store it too
-                if (q.Length >= 3)
-                    await UpsertAliasAsync(AliasType.Team, t.StrTeam!, q, t.IdTeam, ct);
-            }
+            AddAliasCandidates(aliasCandidates, AliasType.Team,
+                soccerTeams.Where(t => !string.IsNullOrWhiteSpace(t.StrTeam)).Select(t => (t.StrTeam!, t.IdTeam)), q);
 
             // Build results
             foreach (var t in soccerTeams)
@@ -202,15 +272,8 @@ public class SearchController : ControllerBase
                 v2Leagues = retryLeagues.DistinctByKey(l => l.IdLeague);
             }
 
-            // Learn aliases
-            foreach (var L in v2Leagues.Take(30))
-            {
-                if (string.IsNullOrWhiteSpace(L.StrLeague)) continue;
-
-                await UpsertAliasAsync(AliasType.League, L.StrLeague!, L.StrLeague!, L.IdLeague, ct);
-                if (q.Length >= 3)
-                    await UpsertAliasAsync(AliasType.League, L.StrLeague!, q, L.IdLeague, ct);
-            }
+            AddAliasCandidates(aliasCandidates, AliasType.League,
+                v2Leagues.Take(30).Where(L => !string.IsNullOrWhiteSpace(L.StrLeague)).Select(L => (L.StrLeague!, (string?)L.IdLeague)), q);
 
             // Build results
             foreach (var L in v2Leagues.Take(per))
@@ -278,15 +341,8 @@ public class SearchController : ControllerBase
                 .Take(30)
                 .ToList();
 
-            // Learn aliases
-            foreach (var P in soccerPlayers)
-            {
-                if (string.IsNullOrWhiteSpace(P.StrPlayer)) continue;
-
-                await UpsertAliasAsync(AliasType.Player, P.StrPlayer!, P.StrPlayer!, P.IdPlayer, ct);
-                if (q.Length >= 3)
-                    await UpsertAliasAsync(AliasType.Player, P.StrPlayer!, q, P.IdPlayer, ct);
-            }
+            AddAliasCandidates(aliasCandidates, AliasType.Player,
+                soccerPlayers.Where(P => !string.IsNullOrWhiteSpace(P.StrPlayer)).Select(P => (P.StrPlayer!, (string?)P.IdPlayer)), q);
 
             // Build results
             foreach (var P in soccerPlayers.Take(per))
@@ -348,15 +404,8 @@ public class SearchController : ControllerBase
                 v2Venues = retryVenues.DistinctByKey(v => v.IdVenue);
             }
 
-            // Learn aliases
-            foreach (var V in v2Venues.Take(30))
-            {
-                if (string.IsNullOrWhiteSpace(V.StrVenue)) continue;
-
-                await UpsertAliasAsync(AliasType.Venue, V.StrVenue!, V.StrVenue!, V.IdVenue, ct);
-                if (q.Length >= 3)
-                    await UpsertAliasAsync(AliasType.Venue, V.StrVenue!, q, V.IdVenue, ct);
-            }
+            AddAliasCandidates(aliasCandidates, AliasType.Venue,
+                v2Venues.Take(30).Where(V => !string.IsNullOrWhiteSpace(V.StrVenue)).Select(V => (V.StrVenue!, (string?)V.IdVenue)), q);
 
             // Build results
             foreach (var V in v2Venues.Take(per))
@@ -406,7 +455,7 @@ public class SearchController : ControllerBase
                 Subtitle = m.Competition.Name,
                 Url = $"/match/{m.Id}",
                 Id = m.Id,
-                When = new DateTimeOffset(DateTime.SpecifyKind(m.UtcDate, DateTimeKind.Utc))
+                When = m.UtcDate
             })
             .ToListAsync();
 
@@ -420,9 +469,7 @@ public class SearchController : ControllerBase
                 Title = n.Title,
                 Subtitle = n.Source,
                 Url = n.Url,
-                When = n.PublishedAtUtc == null
-                    ? null
-                    : new DateTimeOffset(DateTime.SpecifyKind(n.PublishedAtUtc.Value, DateTimeKind.Utc))
+                When = n.PublishedAtUtc
             })
             .ToListAsync();
 
@@ -439,8 +486,7 @@ public class SearchController : ControllerBase
             .Take(limit)
             .ToList();
 
-        // Save alias updates
-        await _db.SaveChangesAsync(ct);
+        await BatchUpsertAliasesAsync(aliasCandidates, ct);
         return merged;
     }
 }

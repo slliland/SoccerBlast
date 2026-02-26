@@ -8,7 +8,7 @@ public class NewsItem
     public string Url { get; set; } = "";
     public string Source { get; set; } = "";
 
-    public DateTime? PublishedAtUtc { get; set; }
+    public DateTimeOffset? PublishedAtUtc { get; set; }
 
     public string? ThumbnailUrl { get; set; }
     public string? Content { get; set; }

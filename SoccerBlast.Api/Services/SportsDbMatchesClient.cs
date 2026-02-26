@@ -7,10 +7,12 @@ namespace SoccerBlast.Api.Services;
 public class SportsDbMatchesClient
 {
     private readonly IHttpClientFactory _httpFactory;
+    private readonly ILogger<SportsDbMatchesClient> _log;
 
-    public SportsDbMatchesClient(IHttpClientFactory httpFactory, IOptions<TheSportsDbOptions> _)
+    public SportsDbMatchesClient(IHttpClientFactory httpFactory, IOptions<TheSportsDbOptions> _, ILogger<SportsDbMatchesClient> log)
     {
         _httpFactory = httpFactory;
+        _log = log;
     }
 
     private HttpClient Create() => _httpFactory.CreateClient("sportsdb-v1");
@@ -20,8 +22,11 @@ public class SportsDbMatchesClient
     {
         var dateStr = dateUtc.ToString("yyyy-MM-dd");
         var url = $"eventsday.php?d={dateStr}&s=Soccer";
+        _log.LogInformation("[SportsDB] eventsday d={Date} ...", dateStr);
         using var http = Create();
         var resp = await http.GetFromJsonAsync<SportsDbEventsResponse>(url, ct);
+        var count = resp?.Events?.Count ?? 0;
+        _log.LogInformation("[SportsDB] eventsday d={Date} returned {Count} events", dateStr, count);
         return resp?.Events ?? [];
     }
 
@@ -31,6 +36,7 @@ public class SportsDbMatchesClient
         var results = new List<MatchItem>();
         var from = dateFromUtc.Date;
         var to = dateToUtc.Date;
+        _log.LogInformation("[SportsDB] GetMatchesAsync from={From} to={To}", from.ToString("yyyy-MM-dd"), to.ToString("yyyy-MM-dd"));
 
         for (var d = from; d <= to; d = d.AddDays(1))
         {

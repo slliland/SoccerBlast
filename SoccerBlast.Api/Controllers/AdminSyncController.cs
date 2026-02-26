@@ -14,12 +14,72 @@ public class AdminSyncController : ControllerBase
     private readonly MatchSyncService _sync;
     private readonly TeamProfileSyncService _profileSync;
     private readonly AppDbContext _db;
+    private readonly IConfiguration _config;
 
-    public AdminSyncController(MatchSyncService sync, TeamProfileSyncService profileSync, AppDbContext db)
+    public AdminSyncController(MatchSyncService sync, TeamProfileSyncService profileSync, AppDbContext db, IConfiguration config)
     {
         _sync = sync;
         _profileSync = profileSync;
         _db = db;
+        _config = config;
+    }
+
+    /// <summary>Which DB the API is using (Postgres host or SQLite path). Connection string is redacted.</summary>
+    [HttpGet("db-info")]
+    public IActionResult GetDbInfo()
+    {
+        var conn = _config.GetConnectionString("DefaultConnection")
+            ?? Environment.GetEnvironmentVariable("SUPABASE_CONNECTION_STRING")
+            ?? "";
+        var isPostgres = conn.Contains("Host=", StringComparison.OrdinalIgnoreCase)
+            || conn.TrimStart().StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase);
+        string? resolvedPath = null;
+        string? host = null;
+        if (!string.IsNullOrWhiteSpace(conn))
+        {
+            if (isPostgres)
+            {
+                if (conn.TrimStart().StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        var uri = new Uri(conn);
+                        host = uri.Host;
+                    }
+                    catch { host = "[Postgres]"; }
+                }
+                else
+                {
+                    foreach (var part in conn.Split(';'))
+                    {
+                        var kv = part.Split('=', 2, StringSplitOptions.TrimEntries);
+                        if (kv.Length == 2 && string.Equals(kv[0], "Host", StringComparison.OrdinalIgnoreCase))
+                        { host = kv[1]; break; }
+                    }
+                    if (string.IsNullOrEmpty(host)) host = "[Postgres]";
+                }
+            }
+            else
+            {
+                const string prefix = "Data Source=";
+                var ds = conn.Trim();
+                if (ds.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    var dataSource = ds.Substring(prefix.Length).Trim().Trim('"');
+                    resolvedPath = Path.IsPathRooted(dataSource)
+                        ? dataSource
+                        : Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), dataSource));
+                }
+            }
+        }
+
+        return Ok(new
+        {
+            provider = isPostgres ? "Postgres" : "SQLite",
+            host,
+            resolvedPath,
+            currentDirectory = Directory.GetCurrentDirectory()
+        });
     }
 
     [HttpGet("status")]

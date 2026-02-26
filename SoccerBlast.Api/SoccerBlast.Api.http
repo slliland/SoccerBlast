@@ -4,3 +4,11 @@ GET {{SoccerBlast.Api_HostAddress}}/weatherforecast/
 Accept: application/json
 
 ###
+# Import honours from cache (run ScrapeTeamHonours first).
+# POST {{SoccerBlast.Api_HostAddress}}/api/admin/import/honours
+
+# Insert league–honour mapping from main DB (no cache): matches Competitions+ExternalId to Honours by name/slug.
+POST {{SoccerBlast.Api_HostAddress}}/api/admin/import/league-honour-mapping
+Accept: application/json
+
+###

@@ -14,22 +14,26 @@ public class MatchesController : ControllerBase
     private readonly AppDbContext _db;
     private readonly MatchSyncService _sync;
     private readonly TheSportsDbClient _sportsDb;
+    private readonly ILogger<MatchesController> _logger;
 
-    public MatchesController(AppDbContext db, MatchSyncService sync, TheSportsDbClient sportsDb)
+    public MatchesController(AppDbContext db, MatchSyncService sync, TheSportsDbClient sportsDb, ILogger<MatchesController> logger)
     {
         _db = db;
         _sync = sync;
         _sportsDb = sportsDb;
+        _logger = logger;
     }
 
     private async Task<List<MatchDto>> QueryMatches(DateTime startUtc, DateTime endUtc, int? competitionId = null)
     {
+        var startOffset = new DateTimeOffset(startUtc, TimeSpan.Zero);
+        var endOffset = new DateTimeOffset(endUtc, TimeSpan.Zero);
         var q = _db.Matches
             .AsNoTracking()
             .Include(m => m.Competition)
             .Include(m => m.HomeTeam)
             .Include(m => m.AwayTeam)
-            .Where(m => m.UtcDate >= startUtc && m.UtcDate < endUtc);
+            .Where(m => m.UtcDate >= startOffset && m.UtcDate < endOffset);
 
         if (competitionId.HasValue)
             q = q.Where(m => m.CompetitionId == competitionId.Value);
@@ -54,7 +58,8 @@ public class MatchesController : ControllerBase
 
                 HomeScore = m.HomeScore,
                 AwayScore = m.AwayScore,
-                Status = m.Status
+                Status = m.Status,
+                ExternalId = m.ExternalId > 0 ? m.ExternalId.ToString() : null
             })
             .ToListAsync();
     }
@@ -87,12 +92,14 @@ public class MatchesController : ControllerBase
         var (startUtc, _) = DateRangeService.GetUtcRangeForLocalDate(fromLocal, tz);
         var (_, endUtc) = DateRangeService.GetUtcRangeForLocalDate(toLocal.AddDays(1), tz);
 
+        var startOffset = new DateTimeOffset(startUtc, TimeSpan.Zero);
+        var endOffset = new DateTimeOffset(endUtc, TimeSpan.Zero);
         var q = _db.Matches
             .AsNoTracking()
             .Include(m => m.Competition)
             .Include(m => m.HomeTeam)
             .Include(m => m.AwayTeam)
-            .Where(m => m.UtcDate >= startUtc && m.UtcDate < endUtc);
+            .Where(m => m.UtcDate >= startOffset && m.UtcDate < endOffset);
 
         if (competitionId.HasValue)
             q = q.Where(m => m.CompetitionId == competitionId.Value);
@@ -144,7 +151,8 @@ public class MatchesController : ControllerBase
 
                 HomeScore = m.HomeScore,
                 AwayScore = m.AwayScore,
-                Status = m.Status
+                Status = m.Status,
+                ExternalId = m.ExternalId > 0 ? m.ExternalId.ToString() : null
             })
             .ToListAsync();
 
@@ -176,23 +184,36 @@ public class MatchesController : ControllerBase
         [FromQuery] int? competitionId,
         [FromQuery] string? tz)
     {
+        _logger.LogInformation("[Matches] GET date/{Date} tz={Tz}", date, tz ?? "null");
         if (!DateTime.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var localDate))
             return BadRequest("Invalid date format. Use yyyy-MM-dd.");
 
         tz ??= "America/New_York";
         var (startUtc, endUtc) = DateRangeService.GetUtcRangeForLocalDate(localDate, tz);
-        return await QueryMatches(startUtc, endUtc, competitionId);
+        var matches = await QueryMatches(startUtc, endUtc, competitionId);
+        _logger.LogInformation("[Matches] GET date/{Date} returning {Count} matches", date, matches.Count);
+        return matches;
     }
 
     [HttpPost("date/{date}")]
     public async Task<ActionResult<int>> SyncByLocalDate(string date, [FromQuery] string? tz)
     {
+        _logger.LogInformation("[Matches] POST sync date/{Date} tz={Tz}", date, tz ?? "null");
         if (!DateTime.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var localDate))
             return BadRequest("Invalid date format. Use yyyy-MM-dd.");
 
         tz ??= "America/New_York";
-        var synced = await _sync.SyncLocalDateAsync(localDate.Date, tz);
-        return Ok(synced);
+        try
+        {
+            var synced = await _sync.SyncLocalDateAsync(localDate.Date, tz);
+            _logger.LogInformation("[Matches] POST sync date/{Date} done synced={Count}", date, synced);
+            return Ok(synced);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "SyncByLocalDate failed for date={Date}", date);
+            return StatusCode(500, ex.Message);
+        }
     }
 
     /// <summary>GET api/Matches/range?from=yyyy-MM-dd&to=yyyy-MM-dd (and optional tz, competitionId).</summary>
@@ -315,7 +336,7 @@ public class MatchesController : ControllerBase
         return new MatchDto
         {
             Id = extMatchId,
-            UtcDate = utc,
+            UtcDate = new DateTimeOffset(utc, TimeSpan.Zero),
 
             CompetitionId = int.TryParse(e.IdLeague, out var lid) ? lid : -1,
             CompetitionName = string.IsNullOrWhiteSpace(e.StrLeague) ? "Match" : e.StrLeague!,
@@ -331,7 +352,8 @@ public class MatchesController : ControllerBase
 
             HomeScore = e.IntHomeScore,
             AwayScore = e.IntAwayScore,
-            Status = e.StrStatus ?? ""
+            Status = e.StrStatus ?? "",
+            ExternalId = e.IdEvent
         };
     }
 
@@ -382,5 +404,31 @@ public class MatchesController : ControllerBase
         tz ??= "America/New_York";
         var synced = await _sync.SyncTeamScheduleAsync(teamId, f, t, tz, ct);
         return Ok(new { synced });
+    }
+
+    /// <summary>Get full match detail by TheSportsDB idEvent (lookup/event + lineup + timeline + stats + highlights + tv).</summary>
+    [HttpGet("event/{idEvent}")]
+    public async Task<ActionResult<MatchDetailResponseDto>> GetEventByExternalId(string idEvent, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(idEvent)) return BadRequest();
+        var ev = await _sportsDb.LookupEventAsync(idEvent.Trim(), ct);
+        if (ev == null) return NotFound();
+
+        var lineupTask = _sportsDb.LookupEventLineupAsync(idEvent.Trim(), ct);
+        var timelineTask = _sportsDb.LookupEventTimelineAsync(idEvent.Trim(), ct);
+        var statsTask = _sportsDb.LookupEventStatsAsync(idEvent.Trim(), ct);
+        var highlightsTask = _sportsDb.LookupEventHighlightsAsync(idEvent.Trim(), ct);
+        var tvTask = _sportsDb.LookupEventTvAsync(idEvent.Trim(), ct);
+        await Task.WhenAll(lineupTask, timelineTask, statsTask, highlightsTask, tvTask);
+
+        return Ok(new MatchDetailResponseDto
+        {
+            Event = ev,
+            Lineup = await lineupTask,
+            Timeline = await timelineTask,
+            Stats = await statsTask,
+            Highlights = await highlightsTask,
+            Tv = await tvTask
+        });
     }
 }

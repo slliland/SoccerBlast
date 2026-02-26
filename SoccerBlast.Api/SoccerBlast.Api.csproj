@@ -16,6 +16,8 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.3" />
+    <PackageReference Include="Npgsql" Version="10.0.1" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
     <PackageReference Include="Raffinert.FuzzySharp" Version="4.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.2" />
     <PackageReference Include="System.ServiceModel.Syndication" Version="10.0.3" />
@@ -24,5 +26,11 @@
   <ItemGroup>
     <ProjectReference Include="..\SoccerBlast.Shared\SoccerBlast.Shared.csproj" />
   </ItemGroup>
+
+  <!-- On macOS the SDK can create "bin\Debug" (literal backslash), breaking globs (MSB3552). Force Unix-style paths. -->
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('OSX')) or $([MSBuild]::IsOSPlatform('Linux'))">
+    <BaseOutputPath>$(MSBuildProjectDirectory)/bin/</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(MSBuildProjectDirectory)/obj/</BaseIntermediateOutputPath>
+  </PropertyGroup>
 
 </Project>

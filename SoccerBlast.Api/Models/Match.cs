@@ -5,9 +5,9 @@ public class Match
     public int Id { get; set; }
 
     public string Provider { get; set; } = "SportsDbMatches";
-    public int ExternalId { get; set; }         // provider m.Id
+    public int ExternalId { get; set; }
 
-    public DateTime UtcDate { get; set; }
+    public DateTimeOffset UtcDate { get; set; }
     public string Status { get; set; } = "";
 
     public int? HomeScore { get; set; }

@@ -7,7 +7,6 @@ namespace SoccerBlast.Api.Services;
 
 /// <summary>
 /// Syncs team profile from SportsDB only. Single source: team identity is SportsDB id (Team.SportsDbId or Team.Id).
-/// See TeamProfileSyncService.README.md for previous multi-source design.
 /// </summary>
 public sealed class TeamProfileSyncService
 {
